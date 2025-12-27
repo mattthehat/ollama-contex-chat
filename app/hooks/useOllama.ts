@@ -20,13 +20,26 @@ type Message = {
     content: string;
 };
 
+type ModelOptions = {
+    temperature?: number;
+    top_p?: number;
+    top_k?: number;
+    repeat_penalty?: number;
+    seed?: number;
+};
+
 export function useOllama() {
     const [response, setResponse] = useState<string>('');
     const [isStreaming, setIsStreaming] = useState(false);
     const [error, setError] = useState<string>('');
 
     const sendMessage = useCallback(
-        async (userInput: string, model: string, messages?: Message[]) => {
+        async (
+            userInput: string,
+            model: string,
+            messages?: Message[],
+            options?: ModelOptions
+        ) => {
             if (!userInput?.trim()) {
                 setError('Please enter a message');
                 return;
@@ -36,7 +49,7 @@ export function useOllama() {
             setResponse('');
             setError('');
 
-            const payload = {
+            const payload: any = {
                 model,
                 messages: messages || [
                     {
@@ -47,6 +60,30 @@ export function useOllama() {
                 ],
                 stream: true,
             };
+
+            // Add model options if provided, filtering out undefined/null values
+            if (options) {
+                const cleanOptions: Record<string, number> = {};
+                if (options.temperature !== undefined && options.temperature !== null) {
+                    cleanOptions.temperature = options.temperature;
+                }
+                if (options.top_p !== undefined && options.top_p !== null) {
+                    cleanOptions.top_p = options.top_p;
+                }
+                if (options.top_k !== undefined && options.top_k !== null) {
+                    cleanOptions.top_k = options.top_k;
+                }
+                if (options.repeat_penalty !== undefined && options.repeat_penalty !== null) {
+                    cleanOptions.repeat_penalty = options.repeat_penalty;
+                }
+                if (options.seed !== undefined && options.seed !== null) {
+                    cleanOptions.seed = options.seed;
+                }
+
+                if (Object.keys(cleanOptions).length > 0) {
+                    payload.options = cleanOptions;
+                }
+            }
 
             try {
                 const ollamaEndpoint =
@@ -61,7 +98,8 @@ export function useOllama() {
                 });
 
                 if (!fetchResponse.ok) {
-                    throw new Error('Failed to fetch from Ollama API');
+                    const errorText = await fetchResponse.text();
+                    throw new Error(`Failed to fetch from Ollama API: ${fetchResponse.status} - ${errorText}`);
                 }
 
                 const reader = fetchResponse.body?.getReader();

@@ -8,4 +8,7 @@ export default [
     route('library', 'routes/library/index.tsx'),
     route('library/new', 'routes/library/new.tsx'),
     route('library/:uuid', 'routes/library/view.tsx'),
+    route('models', 'routes/models/index.tsx'),
+    route('models/new', 'routes/models/new.tsx'),
+    route('models/:modelId', 'routes/models/$modelId.tsx'),
 ] satisfies RouteConfig;

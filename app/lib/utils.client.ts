@@ -31,87 +31,24 @@ export const americanToBritish = (chunk: string): string => {
         'tumor',
     ];
 
-    // Words that end in -ize/-yze → -ise/-yse
-    const izeToIseStems = [
-        'real',
-        'organ',
-        'modern',
-        'character',
-        'civil',
-        'colon',
-        'special',
-        'general',
-        'legal',
-        'final',
-        'central',
-        'personal',
-        'national',
-        'social',
-        'visual',
-        'normal',
-        'local',
-        'moral',
-        'neutral',
-        'natural',
-        'criminal',
-        'partial',
-        'capital',
-        'hospital',
-        'formal',
-        'digital',
-        'vital',
-        'total',
-        'royal',
-        'brutal',
-        'serial',
-        'material',
-        'memorial',
-        'editorial',
-        'itual',
-        'standard',
-        'custom',
-        'minim',
-        'maxim',
-        'vocal',
-        'ideal',
-        'emphas',
-        'summar',
-        'categor',
-        'apolog',
-        'recogn',
-        'critic',
-        'symbol',
-        'util',
-        'stabil',
-        'mobil',
-        'author',
-        'terror',
-        'popular',
-        'familiar',
-        'regular',
-        'secular',
-        'similar',
-        'particular',
-        'polar',
-        'solar',
-        'amateur',
-        'civil',
-        'anal',
-        'paral',
-        'met',
-        'epitom',
-        'synthes',
-        'hypothes',
-        'emuls',
-        'decentral',
+    // Words that should NEVER be converted from -ize to -ise (exceptions to the rule)
+    // These are words where -ize is correct in both American and British English
+    const izeExceptions = [
+        'size',      // size, sized, sizing (not "sise")
+        'prize',     // prize, prized (not "prise" which means to pry open)
+        'seize',     // seize, seized (not "seise")
+        'capsize',   // capsize, capsized
     ];
 
+    // Words ending in -yze that convert to -yse
     const yzeToYseWords = [
         'analyze',
         'paralyze',
         'catalyze',
         'hydrolyze',
         'electrolyze',
+        'dialyze',
+        'breathalyze',
     ];
 
     // Words that end in -er → -re
@@ -153,12 +90,34 @@ export const americanToBritish = (chunk: string): string => {
         { us: 'fueling', uk: 'fuelling' },
     ];
 
-    // Other common exceptions
+    // Context-aware exceptions - words that should only convert in specific contexts
+    const contextAwareConversions = [
+        {
+            // "check" → "cheque" only for payment instruments (e.g., "cash a check", "write a check")
+            pattern: /\b(cash|write|deposit|bounce|clear|issue|receive|pay by|bank|personal|certified)\s+(a\s+)?check\b/gi,
+            replacement: (match: string) => match.replace(/check/gi, (m) => preserveCase(m, 'cheque'))
+        },
+        {
+            // "program" → "programme" only for TV/radio/theater (not for software/computing)
+            // Look for contexts like "TV program", "radio program", "watch a program"
+            pattern: /\b(tv|radio|television|broadcast|watch|view|aired?|scheduled?)\s+(a\s+)?(program)s?\b/gi,
+            replacement: (match: string) => match.replace(/program/gi, (m) => preserveCase(m, 'programme'))
+        },
+        {
+            // "tire" → "tyre" only for wheels (e.g., "car tire", "flat tire", "spare tire")
+            pattern: /\b(car|vehicle|wheel|flat|spare|change|replace|punctured?|burst)\s+(a\s+)?(tire)s?\b/gi,
+            replacement: (match: string) => match.replace(/tire/gi, (m) => preserveCase(m, 'tyre'))
+        },
+        {
+            // "story" → "storey" only for building levels (e.g., "two-story building", "third story")
+            pattern: /\b(\d+-?|two-?|three-?|multi-?|single-?)(story)\s+(building|house|structure|apartment|tower)\b/gi,
+            replacement: (match: string) => match.replace(/story/gi, (m) => preserveCase(m, 'storey'))
+        }
+    ];
+
+    // Simple exceptions - always convert these
     const exceptions: Record<string, string> = {
         gray: 'grey',
-        check: 'cheque', // only for the payment instrument
-        program: 'programme', // except in computing context
-        tire: 'tyre', // only for the wheel
         aluminum: 'aluminium',
         mom: 'mum',
         math: 'maths',
@@ -172,7 +131,6 @@ export const americanToBritish = (chunk: string): string => {
         plow: 'plough',
         skeptical: 'sceptical',
         skillful: 'skilful',
-        story: 'storey', // only for building levels
     };
 
     const preserveCase = (original: string, replacement: string): string => {
@@ -195,31 +153,33 @@ export const americanToBritish = (chunk: string): string => {
         );
     });
 
-    // Apply -ize → -ise transformations (including derivatives like -ization)
-    izeToIseStems.forEach((stem) => {
-        const patterns = [
-            { from: new RegExp(`\\b(${stem}ize)\\b`, 'gi'), to: `${stem}ise` },
-            {
-                from: new RegExp(`\\b(${stem}ization)\\b`, 'gi'),
-                to: `${stem}isation`,
-            },
-            {
-                from: new RegExp(`\\b(${stem}izing)\\b`, 'gi'),
-                to: `${stem}ising`,
-            },
-            {
-                from: new RegExp(`\\b(${stem}ized)\\b`, 'gi'),
-                to: `${stem}ised`,
-            },
-            {
-                from: new RegExp(`\\b(${stem}izer)\\b`, 'gi'),
-                to: `${stem}iser`,
-            },
-        ];
-        patterns.forEach(({ from, to }) => {
-            result = result.replace(from, (match) => preserveCase(match, to));
-        });
-    });
+    // Apply -ize → -ise transformations using smart pattern matching
+    // Convert most words ending in -ize to -ise, but skip exceptions
+    // This catches: organize→organise, customize→customise, realize→realise, etc.
+    // And their derivatives: -ization→-isation, -izing→-ising, -ized→-ised, -izer→-iser
+    const izeExceptionPattern = izeExceptions.join('|');
+
+    result = result.replace(
+        /\b([a-z]+)(iz)(e|ed|es|ing|ation|ations|er|ers)\b/gi,
+        (match, stem, iz, suffix) => {
+            // Check if this is an exception word
+            const fullWord = stem + iz + (suffix.startsWith('e') ? 'e' : suffix.startsWith('a') ? 'ation' : '');
+            if (new RegExp(`\\b(${izeExceptionPattern})`, 'i').test(fullWord)) {
+                return match; // Don't convert exceptions
+            }
+
+            // Convert -ize to -ise
+            const convertedSuffix = suffix
+                .replace(/^ation/, 'isation')
+                .replace(/^e$/, 'e')
+                .replace(/^ed$/, 'ed')
+                .replace(/^es$/, 'es')
+                .replace(/^ing$/, 'ing')
+                .replace(/^er/, 'er');
+
+            return preserveCase(match, stem + 'is' + convertedSuffix);
+        }
+    );
 
     // Apply -yze → -yse transformations
     yzeToYseWords.forEach((word) => {
@@ -266,7 +226,12 @@ export const americanToBritish = (chunk: string): string => {
         result = result.replace(pattern, (match) => preserveCase(match, uk));
     });
 
-    // Apply exceptions
+    // Apply context-aware conversions (must happen before simple exceptions)
+    contextAwareConversions.forEach(({ pattern, replacement }) => {
+        result = result.replace(pattern, replacement);
+    });
+
+    // Apply simple exceptions
     Object.entries(exceptions).forEach(([us, uk]) => {
         const pattern = new RegExp(`\\b(${us})\\b`, 'gi');
         result = result.replace(pattern, (match) => preserveCase(match, uk));

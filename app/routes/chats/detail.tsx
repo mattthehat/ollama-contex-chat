@@ -8,15 +8,17 @@ import ChatHistory from '~/components/ChatHistory';
 import ChatMessage from '~/components/ChatMessage';
 import { getChatMessages, saveMessage } from '~/lib/chat.server';
 import { buildMessagesForOllama, estimateTokenCount, calculateTotalTokens } from '~/lib/chat';
-import config from '~/lib/config';
 import { getAllDocuments, buildRAGContext } from '~/lib/document.server';
+import { getAllCustomModels, getCustomModelById } from '~/lib/models.server';
+import { detectPromptInjection, sanitizeRAGContext, protectSystemPrompt } from '~/lib/prompt-protection';
 
 export const loader = async ({ params }: Route.LoaderArgs) => {
     const { chatId } = params;
     const messages = await getChatMessages(chatId || '');
     const libraryDocuments = await getAllDocuments();
+    const customModels = await getAllCustomModels();
 
-    return { messages, libraryDocuments, chatId };
+    return { messages, libraryDocuments, customModels, chatId };
 };
 
 export const meta = ({ params }: Route.MetaArgs) => {
@@ -35,6 +37,14 @@ type ActionData = {
     model: string | null;
     selectedDocs: string[];
     ragContext?: string;
+    systemPrompt?: string;
+    modelConfig?: {
+        temperature: number;
+        top_p: number;
+        top_k: number;
+        repeat_penalty: number;
+        seed?: number;
+    };
 };
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
@@ -56,8 +66,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
     // Handle initial message submission
     const message = formData.get('message') as string;
-    const model = formData.get('model') as string;
-    const selectedDocs = formData.getAll('libraryDocs') as string[];
+    const customModelId = formData.get('customModelId') as string;
 
     if (!message?.trim()) {
         return {
@@ -66,38 +75,95 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
             model: null,
             selectedDocs: [],
         };
-    } else if (!model?.trim()) {
+    } else if (!customModelId?.trim()) {
         return {
             errors: { message: null, model: 'Please select a model' },
             message: null,
             model: null,
             selectedDocs: [],
         };
-    } else {
+    }
+
+    // Check for prompt injection attempts in user message
+    const injectionWarning = detectPromptInjection(message);
+    if (injectionWarning) {
+        return {
+            errors: { message: injectionWarning, model: null },
+            message: null,
+            model: null,
+            selectedDocs: [],
+        };
+    }
+
+    // Process the message
+    {
+        // Get the custom model configuration
+        const customModel = await getCustomModelById(parseInt(customModelId));
+        if (!customModel) {
+            return {
+                errors: { message: null, model: 'Model not found' },
+                message: null,
+                model: null,
+                selectedDocs: [],
+            };
+        }
+
+        // Get documents associated with this model
+        const { getModelDocumentIds } = await import('~/lib/models.server');
+        const documentIds = await getModelDocumentIds(customModel.modelId);
+
+        // Convert document IDs to UUIDs
+        const { getAllDocuments } = await import('~/lib/document.server');
+        const allDocs = await getAllDocuments();
+        const selectedDocs = allDocs
+            .filter(doc => documentIds.includes(doc.documentId))
+            .map(doc => doc.documentUUID);
+
         // Get conversation history for better RAG context
         const conversationHistory = chatId
             ? await getChatMessages(chatId)
             : [];
 
-        // Calculate dynamic chunk limit based on available context window
-        const systemPromptTokens = estimateTokenCount('You are a helpful assistant.');
+        // Use model's context configuration
+        const systemPromptTokens = estimateTokenCount(customModel.systemPrompt);
         const conversationTokens = calculateTotalTokens(conversationHistory);
         const messageTokens = estimateTokenCount(message);
-        const availableTokens = (config.maxContext * 0.7) - systemPromptTokens - conversationTokens - messageTokens;
+        const availableTokens = (customModel.maxContextTokens * 0.7) - systemPromptTokens - conversationTokens - messageTokens;
 
-        // Assume ~500 tokens per chunk on average, min 3, max 10
-        const dynamicChunkLimit = Math.max(3, Math.min(10, Math.floor(availableTokens / 500)));
+        // Use model's ragMaxChunks setting or calculate dynamically
+        const dynamicChunkLimit = Math.max(3, Math.min(customModel.ragMaxChunks, Math.floor(availableTokens / 500)));
 
-        // Build RAG context from selected documents with conversation context
-        const ragContext = selectedDocs.length > 0
-            ? await buildRAGContext(message, selectedDocs, conversationHistory, dynamicChunkLimit)
+        // Build RAG context using model's configuration
+        const rawRAGContext = selectedDocs.length > 0
+            ? await buildRAGContext(
+                message,
+                selectedDocs,
+                conversationHistory,
+                dynamicChunkLimit,
+                customModel.ragSimilarityThreshold,
+                customModel.useAdvancedRAG
+            )
             : '';
+
+        // Sanitize RAG context to prevent prompt injection from documents
+        const ragContext = sanitizeRAGContext(rawRAGContext);
+
+        // Protect system prompt against injection attempts
+        const protectedSystemPrompt = protectSystemPrompt(customModel.systemPrompt);
 
         return {
             message,
-            model,
+            model: customModel.ollamaModel,
             selectedDocs,
             ragContext,
+            systemPrompt: protectedSystemPrompt,
+            modelConfig: {
+                temperature: parseFloat(customModel.ollamaTemperature as any),
+                top_p: parseFloat(customModel.ollamaTopP as any),
+                top_k: parseInt(customModel.ollamaTopK as any),
+                repeat_penalty: parseFloat(customModel.ollamaRepeatPenalty as any),
+                seed: customModel.ollamaSeed ? parseInt(customModel.ollamaSeed as any) : undefined,
+            },
             errors: { message: null, model: null },
         };
     }
@@ -111,6 +177,7 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [thinking, setThinking] = useState(false);
     const [currentUserMessage, setCurrentUserMessage] = useState<string>('');
+    const [showDebug, setShowDebug] = useState(false);
     const hasSavedRef = useRef(false);
     const processedMessageRef = useRef<string>('');
 
@@ -130,14 +197,15 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
             const allMessages = buildMessagesForOllama(
                 loaderData?.messages || [],
                 actionData.message,
-                'You are a helpful assistant.',
+                actionData.systemPrompt || 'You are a helpful assistant.',
                 actionData.ragContext || ''
             );
 
             ollama.sendMessage(
                 actionData.message,
                 actionData.model,
-                allMessages
+                allMessages,
+                actionData.modelConfig
             );
             setThinking(true);
         }
@@ -217,6 +285,72 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
                 />
             )}
 
+            {/* Debug Panel */}
+            {actionData && (
+                <div className="my-6 border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                    <button
+                        type="button"
+                        onClick={() => setShowDebug(!showDebug)}
+                        className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-left font-medium text-sm flex items-center justify-between transition-colors"
+                    >
+                        <span className="dark:text-white">Debug Information</span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                            {showDebug ? '▼' : '▶'}
+                        </span>
+                    </button>
+                    {showDebug && (
+                        <div className="p-4 bg-white dark:bg-gray-800 space-y-4 text-sm">
+                            {/* Model Configuration */}
+                            {actionData.modelConfig && (
+                                <div>
+                                    <h3 className="font-semibold mb-2 dark:text-white">Model Configuration</h3>
+                                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded border border-gray-200 dark:border-gray-700">
+                                        <div className="grid grid-cols-2 gap-2 text-xs">
+                                            <div className="dark:text-gray-300"><span className="font-medium">Model:</span> {actionData.model}</div>
+                                            <div className="dark:text-gray-300"><span className="font-medium">Temperature:</span> {actionData.modelConfig.temperature}</div>
+                                            <div className="dark:text-gray-300"><span className="font-medium">Top P:</span> {actionData.modelConfig.top_p}</div>
+                                            <div className="dark:text-gray-300"><span className="font-medium">Top K:</span> {actionData.modelConfig.top_k}</div>
+                                            <div className="dark:text-gray-300"><span className="font-medium">Repeat Penalty:</span> {actionData.modelConfig.repeat_penalty}</div>
+                                            {actionData.modelConfig.seed && (
+                                                <div className="dark:text-gray-300"><span className="font-medium">Seed:</span> {actionData.modelConfig.seed}</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* System Prompt */}
+                            {actionData.systemPrompt && (
+                                <div>
+                                    <h3 className="font-semibold mb-2 dark:text-white">System Prompt</h3>
+                                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded border border-gray-200 dark:border-gray-700">
+                                        <pre className="text-xs whitespace-pre-wrap font-mono dark:text-gray-300">{actionData.systemPrompt}</pre>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* RAG Context */}
+                            {actionData.ragContext && (
+                                <div>
+                                    <h3 className="font-semibold mb-2 dark:text-white">
+                                        RAG Context ({actionData.selectedDocs.length} documents)
+                                    </h3>
+                                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded border border-gray-200 dark:border-gray-700 max-h-96 overflow-y-auto">
+                                        <pre className="text-xs whitespace-pre-wrap font-mono dark:text-gray-300">{actionData.ragContext}</pre>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!actionData.ragContext && (
+                                <div className="text-gray-500 dark:text-gray-400 text-xs italic">
+                                    No RAG context used for this query
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <fetcher.Form method="post" className="my-6">
                 <textarea
                     ref={textareaRef}
@@ -242,37 +376,7 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
                         {actionData.errors.message}
                     </div>
                 )}
-                <div className="flex items-center flex-wrap w-full gap-2 mb-4">
-                    {loaderData.libraryDocuments.length > 0 && (
-                        <>
-                            <span className="text-sm text-gray-600 dark:text-gray-400 w-full mb-1">
-                                Select documents for context:
-                            </span>
-                            {loaderData.libraryDocuments.map((doc: any) => (
-                                <div key={doc.documentId}>
-                                    <input
-                                        type="checkbox"
-                                        id={doc.documentId}
-                                        name="libraryDocs"
-                                        value={doc.documentUUID}
-                                        className="peer hidden"
-                                    />
-                                    <label
-                                        htmlFor={doc.documentId}
-                                        className="cursor-pointer px-3 py-1 rounded-full text-sm transition-all
-                                            bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200
-                                            peer-checked:bg-blue-500 peer-checked:text-white peer-checked:ring-2 peer-checked:ring-blue-300
-                                            hover:bg-gray-300 dark:hover:bg-gray-600
-                                            inline-block"
-                                    >
-                                        {doc.documentTitle}
-                                    </label>
-                                </div>
-                            ))}
-                        </>
-                    )}
-                </div>
-                <div className="flex items-center justify-between w-full">
+                <div className="flex items-center justify-between w-full gap-4">
                     <button
                         disabled={isBusy || ollama.isStreaming}
                         type="submit"
@@ -282,37 +386,43 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
                     >
                         {isBusy ? 'Sending...' : 'Send'}
                     </button>
-                    <select
-                        name="model"
-                        className={`mt-4 p-2 border border-gray-300 rounded block ml-auto ${
-                            actionData?.errors?.model
-                                ? 'border-red-500'
-                                : 'focus:border-blue-500'
-                        }`}
-                        aria-invalid={
-                            actionData?.errors?.model ? 'true' : undefined
-                        }
-                        aria-errormessage={
-                            actionData?.errors?.model
-                                ? 'model-error'
-                                : undefined
-                        }
-                        disabled={isBusy}
-                    >
-                        {config.chatModels.map(
-                            (model: {
-                                modelName: string;
-                                friendlyName: string;
-                            }) => (
+                    <div className="flex-1">
+                        <label htmlFor="customModelId" className="block text-sm font-medium mb-1">
+                            Select AI Model
+                        </label>
+                        <select
+                            name="customModelId"
+                            id="customModelId"
+                            className={`w-full p-2 border border-gray-300 rounded ${
+                                actionData?.errors?.model
+                                    ? 'border-red-500'
+                                    : 'focus:border-blue-500'
+                            }`}
+                            aria-invalid={
+                                actionData?.errors?.model ? 'true' : undefined
+                            }
+                            aria-errormessage={
+                                actionData?.errors?.model
+                                    ? 'model-error'
+                                    : undefined
+                            }
+                            disabled={isBusy}
+                        >
+                            {loaderData.customModels.map((model: any) => (
                                 <option
-                                    key={model.modelName}
-                                    value={model.modelName}
+                                    key={model.modelId}
+                                    value={model.modelId}
                                 >
-                                    {model.friendlyName}
+                                    {model.modelIcon} {model.modelName}
                                 </option>
-                            )
+                            ))}
+                        </select>
+                        {actionData?.errors?.model && (
+                            <div id="model-error" className="text-red-500 text-sm mt-1">
+                                {actionData.errors.model}
+                            </div>
                         )}
-                    </select>
+                    </div>
                 </div>
             </fetcher.Form>
         </div>

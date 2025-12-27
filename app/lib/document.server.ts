@@ -3,38 +3,92 @@ import config from './config';
 import { randomUUID } from 'crypto';
 import pdf from 'pdf-parse';
 import pdf2md from '@opendocsg/pdf2md';
+import { buildContextualChunkText, getAdaptiveChunkSize } from './rag-advanced.server';
 
-// Simple in-memory LRU cache for embeddings
+// Enhanced LRU cache for embeddings with statistics and adaptive TTL
 class EmbeddingCache {
-    private cache: Map<string, { embedding: number[]; timestamp: number }> = new Map();
+    private cache: Map<string, { embedding: number[]; timestamp: number; hits: number; lastAccess: number }> = new Map();
     private maxSize: number = 500;
-    private ttl: number = 1000 * 60 * 15; // 15 minutes
+    private baseTTL: number = 1000 * 60 * 15; // 15 minutes base
+    private maxTTL: number = 1000 * 60 * 60; // 1 hour max
+    private stats = {
+        hits: 0,
+        misses: 0,
+        evictions: 0
+    };
 
     get(key: string): number[] | null {
         const entry = this.cache.get(key);
-        if (!entry) return null;
-
-        // Check if expired
-        if (Date.now() - entry.timestamp > this.ttl) {
-            this.cache.delete(key);
+        if (!entry) {
+            this.stats.misses++;
             return null;
         }
+
+        // Adaptive TTL: frequently accessed items stay longer
+        const adaptiveTTL = Math.min(
+            this.maxTTL,
+            this.baseTTL * (1 + Math.log(entry.hits + 1))
+        );
+
+        // Check if expired
+        if (Date.now() - entry.timestamp > adaptiveTTL) {
+            this.cache.delete(key);
+            this.stats.misses++;
+            return null;
+        }
+
+        // Update access stats
+        entry.hits++;
+        entry.lastAccess = Date.now();
+        this.stats.hits++;
 
         return entry.embedding;
     }
 
     set(key: string, embedding: number[]): void {
-        // If cache is full, remove oldest entry
+        // If cache is full, use LRU eviction (remove least recently used)
         if (this.cache.size >= this.maxSize) {
-            const firstKey = this.cache.keys().next().value;
-            if (firstKey) this.cache.delete(firstKey);
+            let oldestKey: string | null = null;
+            let oldestTime = Infinity;
+
+            for (const [k, v] of this.cache.entries()) {
+                if (v.lastAccess < oldestTime) {
+                    oldestTime = v.lastAccess;
+                    oldestKey = k;
+                }
+            }
+
+            if (oldestKey) {
+                this.cache.delete(oldestKey);
+                this.stats.evictions++;
+            }
         }
 
-        this.cache.set(key, { embedding, timestamp: Date.now() });
+        this.cache.set(key, {
+            embedding,
+            timestamp: Date.now(),
+            hits: 0,
+            lastAccess: Date.now()
+        });
     }
 
-    getStats(): { size: number; maxSize: number; hitRate?: number } {
-        return { size: this.cache.size, maxSize: this.maxSize };
+    getStats(): { size: number; maxSize: number; hitRate: number; hits: number; misses: number; evictions: number } {
+        const total = this.stats.hits + this.stats.misses;
+        const hitRate = total > 0 ? this.stats.hits / total : 0;
+
+        return {
+            size: this.cache.size,
+            maxSize: this.maxSize,
+            hitRate,
+            hits: this.stats.hits,
+            misses: this.stats.misses,
+            evictions: this.stats.evictions
+        };
+    }
+
+    clear(): void {
+        this.cache.clear();
+        this.stats = { hits: 0, misses: 0, evictions: 0 };
     }
 }
 
@@ -604,6 +658,7 @@ export async function getAllDocuments(): Promise<Document[]> {
         []
     );
 
+    console.log('[getAllDocuments] Returned', result.rows.length, 'documents:', result.rows.map(d => ({ id: d.documentId, uuid: d.documentUUID, title: d.documentTitle })));
     return result.rows;
 }
 
@@ -694,15 +749,18 @@ export async function processTextDocument(
             break;
     }
 
+    // Use adaptive chunk sizes based on document type
+    const adaptiveChunkSize = getAdaptiveChunkSize(documentType);
+
     // Use markdown-aware chunking for better semantic coherence
     // This ensures chunks preserve heading context and structure
     let chunksWithMetadata: Array<{ text: string; metadata: { section?: string; hierarchy?: string[] } }>;
     if (documentType === 'code') {
-        const codeChunks = chunkCode(markdownContent);
+        const codeChunks = chunkCode(markdownContent, adaptiveChunkSize);
         chunksWithMetadata = codeChunks.map(text => ({ text, metadata: {} }));
     } else {
         // Use markdown chunking for all types since we converted to markdown
-        chunksWithMetadata = chunkMarkdown(markdownContent);
+        chunksWithMetadata = chunkMarkdown(markdownContent, adaptiveChunkSize);
     }
 
     const metadata: DocumentMetadata = {
@@ -724,8 +782,11 @@ export async function processTextDocument(
         throw new Error('Failed to create document');
     }
 
-    // Extract text for embeddings
-    const chunkTexts = chunksWithMetadata.map(c => c.text);
+    // Extract text for embeddings with contextual enhancement
+    // Include heading hierarchy in embedding for better semantic understanding
+    const chunkTexts = chunksWithMetadata.map(c =>
+        buildContextualChunkText(c.text, c.metadata)
+    );
 
     // Generate all embeddings in parallel batches
     const embeddings = await generateEmbeddingsInBatches(chunkTexts);
@@ -779,9 +840,12 @@ export async function processPDFDocument(
     // Create document record
     const documentUUID = randomUUID();
 
+    // Use adaptive chunk sizes for PDFs
+    const adaptiveChunkSize = getAdaptiveChunkSize('pdf');
+
     // Use markdown-based chunking to preserve semantic structure
     // This is superior to plain text chunking as it maintains headings and context
-    const chunksWithMetadata = chunkMarkdown(markdownContent);
+    const chunksWithMetadata = chunkMarkdown(markdownContent, adaptiveChunkSize);
 
     const metadata: DocumentMetadata = {
         pageCount,
@@ -803,8 +867,11 @@ export async function processPDFDocument(
         throw new Error('Failed to create document');
     }
 
-    // Extract text for embeddings
-    const chunkTexts = chunksWithMetadata.map(c => c.text);
+    // Extract text for embeddings with contextual enhancement
+    // Include heading hierarchy in embedding for better semantic understanding
+    const chunkTexts = chunksWithMetadata.map(c =>
+        buildContextualChunkText(c.text, c.metadata)
+    );
 
     // Generate all embeddings in parallel batches
     const embeddings = await generateEmbeddingsInBatches(chunkTexts);
@@ -891,7 +958,12 @@ export async function searchChunksInDocuments(
     documentUUIDs: string[],
     limit: number = 5
 ): Promise<DocumentChunkWithSimilarity[]> {
+    console.log('[searchChunksInDocuments] Query:', query.substring(0, 100) + '...');
+    console.log('[searchChunksInDocuments] Document UUIDs:', documentUUIDs);
+    console.log('[searchChunksInDocuments] Limit:', limit);
+
     if (documentUUIDs.length === 0) {
+        console.log('[searchChunksInDocuments] No document UUIDs provided, returning empty');
         return [];
     }
 
@@ -919,24 +991,49 @@ export async function searchChunksInDocuments(
         [embeddingJson, ...documentUUIDs, limit]
     );
 
-    if (Array.isArray(result)) {
-        return result as DocumentChunkWithSimilarity[];
+    const chunks = Array.isArray(result)
+        ? result as DocumentChunkWithSimilarity[]
+        : ((result as any)?.rows || []) as DocumentChunkWithSimilarity[];
+
+    console.log('[searchChunksInDocuments] Found', chunks.length, 'chunks');
+    if (chunks.length > 0) {
+        console.log('[searchChunksInDocuments] Top similarities:', chunks.slice(0, 3).map(c => c.similarity));
     }
 
-    return ((result as any)?.rows || []) as DocumentChunkWithSimilarity[];
+    return chunks;
 }
 
 /**
  * Build RAG context from selected documents with conversation history
  * Retrieves relevant chunks and formats them for inclusion in the system prompt
+ *
+ * @param useAdvanced - Set to true to use advanced RAG features (multi-query, hybrid search, re-ranking)
  */
 export async function buildRAGContext(
     currentMessage: string,
     documentUUIDs: string[],
     conversationHistory: Array<{ role: string; content: string }> = [],
     maxChunks: number = 5,
-    similarityThreshold: number = 0.3
+    similarityThreshold: number = 0.3,
+    useAdvanced: boolean = false
 ): Promise<string> {
+    // Use advanced RAG if requested
+    if (useAdvanced) {
+        const { buildAdvancedRAGContext } = await import('./rag-advanced.server');
+        const result = await buildAdvancedRAGContext(
+            currentMessage,
+            documentUUIDs,
+            conversationHistory,
+            maxChunks,
+            similarityThreshold,
+            true,  // useMultiQuery
+            true,  // useHybridSearch
+            true   // useReranking
+        );
+        return result.context;
+    }
+
+    // Use standard RAG (existing implementation below)
     const startTime = Date.now();
 
     if (documentUUIDs.length === 0) {
@@ -975,36 +1072,26 @@ export async function buildRAGContext(
 
     console.log(`[RAG] Search: ${searchTime}ms | Chunks: ${relevantChunks.length}/${chunks.length} | Avg Similarity: ${avgSimilarity.toFixed(3)}`);
 
-    // Format chunks into a context string with enhanced metadata
-    const contextParts = relevantChunks.map((chunk, index) => {
+    // Format chunks with natural context (no chunk numbers or artificial instructions)
+    const contextParts = relevantChunks.map((chunk) => {
         const metadata = typeof chunk.chunkMetadata === 'string'
             ? JSON.parse(chunk.chunkMetadata)
             : chunk.chunkMetadata;
 
         const metaInfo = [];
-        if (metadata.pageNumber) metaInfo.push(`Page ${metadata.pageNumber}`);
-        if (metadata.section) metaInfo.push(`Section: ${metadata.section}`);
-        if (metadata.hierarchy) metaInfo.push(`Path: ${metadata.hierarchy.join(' > ')}`);
+        if (metadata.pageNumber) metaInfo.push(`page ${metadata.pageNumber}`);
+        if (metadata.section) metaInfo.push(metadata.section);
 
-        const metaStr = metaInfo.length > 0 ? ` (${metaInfo.join(', ')})` : '';
-        const similarityPercent = Math.round(chunk.similarity * 100);
+        const sourceInfo = metaInfo.length > 0 ? ` [${metaInfo.join(', ')}]` : '';
 
-        return `### Document Chunk ${index + 1}${metaStr}
-**Relevance:** ${similarityPercent}%
-
-${chunk.chunkContent}`;
+        return `${chunk.chunkContent}${sourceInfo}`;
     });
 
-    return `# Relevant Context from Library Documents
+    return `The following information from your knowledge base may be relevant to answering the user's question:
 
-The following ${relevantChunks.length} chunks have been retrieved from your selected documents (ordered by relevance):
+${contextParts.join('\n\n')}
 
-${contextParts.join('\n\n---\n\n')}
-
-**Instructions:**
-- Use the above context to inform your response when relevant
-- Cite specific chunks when using information (e.g., "According to Chunk 2...")
-- If the context doesn't contain relevant information, rely on your general knowledge`;
+Please provide a comprehensive and detailed response using this information where applicable. Integrate the knowledge naturally into your answer without explicitly mentioning "chunks" or "documents".`;
 }
 
 /**
