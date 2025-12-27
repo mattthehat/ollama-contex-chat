@@ -9,22 +9,28 @@
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
+    "@opendocsg/pdf2md": "^0.2.2",
     "@react-router/node": "7.10.1",
     "@react-router/serve": "7.10.1",
-    "isbot": "^5.1.31",
+    "atlas-mysql": "^1.4.0",
+    "isbot": "^5.1.32",
+    "pdf-parse": "^1.1.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "react-markdown": "^10.1.0",
     "react-router": "7.10.1"
   },
   "devDependencies": {
     "@react-router/dev": "7.10.1",
-    "@tailwindcss/vite": "^4.1.13",
-    "@types/node": "^22",
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/node": "^22.19.3",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "tailwindcss": "^4.1.13",
-    "typescript": "^5.9.2",
-    "vite": "^7.1.7",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0",
+    "vite-plugin-devtools-json": "^1.0.0",
     "vite-tsconfig-paths": "^5.1.4"
   }
 }

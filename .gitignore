@@ -1,7 +1,28 @@
+# System Files
 .DS_Store
 .env
+
+# Dependencies
 /node_modules/
 
 # React Router
 /.react-router/
 /build/
+
+# Logs
+/logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Development
+.claude/
+
+# Database
+*.db
+*.sqlite

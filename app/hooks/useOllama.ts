@@ -1,0 +1,188 @@
+import { useState, useCallback } from 'react';
+import { americanToBritish } from '~/lib/utils.client';
+
+type OllamaChunk = {
+    model: string;
+    created_at: string;
+    message: { role: 'assistant'; content: string };
+    done: boolean;
+    done_reason?: 'stop';
+    total_duration?: number;
+    load_duration?: number;
+    prompt_eval_count?: number;
+    prompt_eval_duration?: number;
+    eval_count?: number;
+    eval_duration?: number;
+};
+
+type Message = {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+};
+
+export function useOllama() {
+    const [response, setResponse] = useState<string>('');
+    const [isStreaming, setIsStreaming] = useState(false);
+    const [error, setError] = useState<string>('');
+
+    const sendMessage = useCallback(
+        async (userInput: string, model: string, messages?: Message[]) => {
+            if (!userInput?.trim()) {
+                setError('Please enter a message');
+                return;
+            }
+
+            setIsStreaming(true);
+            setResponse('');
+            setError('');
+
+            const payload = {
+                model,
+                messages: messages || [
+                    {
+                        role: 'system' as const,
+                        content: 'You are a helpful assistant.',
+                    },
+                    { role: 'user' as const, content: userInput },
+                ],
+                stream: true,
+            };
+
+            try {
+                const ollamaEndpoint =
+                    import.meta.env.VITE_OLLAMA_ENDPOINT ||
+                    'http://localhost:11434/api/chat';
+                const fetchResponse = await fetch(ollamaEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!fetchResponse.ok) {
+                    throw new Error('Failed to fetch from Ollama API');
+                }
+
+                const reader = fetchResponse.body?.getReader();
+                const decoder = new TextDecoder('utf-8');
+
+                if (!reader) {
+                    throw new Error('No reader available');
+                }
+
+                let done = false;
+                let rawAccumulated = ''; // Accumulate raw text before conversion
+                let buffer = ''; // Buffer for incomplete words
+
+                while (!done) {
+                    const { value, done: doneReading } = await reader.read();
+                    done = doneReading;
+
+                    if (value) {
+                        const chunk = decoder.decode(value);
+                        const lines = chunk
+                            .split('\n')
+                            .filter((line) => line.trim());
+
+                        for (const line of lines) {
+                            try {
+                                const json = JSON.parse(line) as OllamaChunk;
+                                if (json.message?.content) {
+                                    // Add to buffer
+                                    buffer += json.message.content;
+
+                                    // Only process complete words (text ending with space or punctuation)
+                                    // Keep incomplete word in buffer for next chunk
+                                    // Include markdown formatting characters to avoid breaking syntax
+                                    const lastSpaceIndex = Math.max(
+                                        buffer.lastIndexOf(' '),
+                                        buffer.lastIndexOf('\n'),
+                                        buffer.lastIndexOf('.'),
+                                        buffer.lastIndexOf(','),
+                                        buffer.lastIndexOf('!'),
+                                        buffer.lastIndexOf('?'),
+                                        buffer.lastIndexOf(';'),
+                                        buffer.lastIndexOf(':'),
+                                        buffer.lastIndexOf('*'),
+                                        buffer.lastIndexOf('_'),
+                                        buffer.lastIndexOf('`'),
+                                        buffer.lastIndexOf('['),
+                                        buffer.lastIndexOf(']'),
+                                        buffer.lastIndexOf('('),
+                                        buffer.lastIndexOf(')'),
+                                        buffer.lastIndexOf('#'),
+                                        buffer.lastIndexOf('>'),
+                                        buffer.lastIndexOf('-')
+                                    );
+
+                                    if (lastSpaceIndex > 0) {
+                                        // Process complete words
+                                        const completeText = buffer.substring(
+                                            0,
+                                            lastSpaceIndex + 1
+                                        );
+                                        const incompleteWord = buffer.substring(
+                                            lastSpaceIndex + 1
+                                        );
+
+                                        rawAccumulated += completeText;
+                                        buffer = incompleteWord;
+
+                                        // Convert and display
+                                        setResponse(
+                                            americanToBritish(rawAccumulated) +
+                                                buffer
+                                        );
+                                    } else if (json.done) {
+                                        // On final chunk, process everything
+                                        rawAccumulated += buffer;
+                                        buffer = '';
+                                        setResponse(
+                                            americanToBritish(rawAccumulated)
+                                        );
+                                    } else {
+                                        // Show buffered text as-is (unconverted) while waiting for word completion
+                                        setResponse(
+                                            americanToBritish(rawAccumulated) +
+                                                buffer
+                                        );
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Invalid JSON chunk:', line);
+                            }
+                        }
+                    }
+                }
+
+                // Final conversion of any remaining buffered text
+                if (buffer) {
+                    rawAccumulated += buffer;
+                    setResponse(americanToBritish(rawAccumulated));
+                }
+            } catch (err) {
+                setError(
+                    err instanceof Error ? err.message : 'An error occurred'
+                );
+            } finally {
+                setIsStreaming(false);
+            }
+        },
+        []
+    );
+
+    const reset = useCallback(() => {
+        setResponse('');
+        setError('');
+        setIsStreaming(false);
+    }, []);
+
+    return {
+        response,
+        isStreaming,
+        error,
+        sendMessage,
+        reset,
+    };
+}
