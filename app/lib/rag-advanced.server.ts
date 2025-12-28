@@ -440,11 +440,9 @@ export async function buildAdvancedRAGContext(
         return `${chunk.chunkContent}${sourceInfo}`;
     });
 
-    const context = `The following information from your knowledge base may be relevant to answering the user's question:
+    const context = `${contextParts.join('\n\n')}
 
-${contextParts.join('\n\n')}
-
-Please provide a comprehensive and detailed response using this information where applicable. Integrate the knowledge naturally into your answer without explicitly mentioning "chunks" or "documents".`;
+Use the above information to answer the user's question. You have access to this information and should answer confidently based on it. Do not use phrases like "I don't have specific guidance" or "based on the information provided" - simply answer the question directly using this knowledge as if it were your own expertise.`;
 
     return {
         context,

@@ -127,6 +127,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 placeholder="e.g., Code Assistant, Research Helper"
                                 required
                             />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">A friendly name to identify this AI model</p>
                             {actionData?.errors?.modelName && (
                                 <p className="text-red-600 dark:text-red-400 text-sm mt-1">{actionData.errors.modelName}</p>
                             )}
@@ -145,6 +146,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 defaultValue="🤖"
                                 maxLength={10}
                             />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">An emoji to visually represent this model (e.g., 💻 for coding, 📚 for research)</p>
                         </div>
 
                         <div>
@@ -156,8 +158,9 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 name="modelDescription"
                                 rows={3}
                                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
-                                placeholder="Describe what this AI model is specialized for..."
+                                placeholder="Describe what this AI model is specialised for..."
                             />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional description of the model's purpose and capabilities</p>
                         </div>
                     </div>
                 </div>
@@ -182,6 +185,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     </option>
                                 ))}
                             </select>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">The underlying Ollama model that powers this AI assistant</p>
                             {actionData?.errors?.ollamaModel && (
                                 <p className="text-red-600 dark:text-red-400 text-sm mt-1">{actionData.errors.ollamaModel}</p>
                             )}
@@ -202,7 +206,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="0.7"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Higher = more creative (0-2)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Controls randomness: 0 = deterministic, 1 = balanced, 2 = very creative</p>
                             </div>
 
                             <div>
@@ -219,7 +223,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="0.9"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Nucleus sampling (0-1)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Limits token choices to top probability mass (0.9 = top 90% likely tokens)</p>
                             </div>
 
                             <div>
@@ -235,7 +239,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="40"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Top-k sampling</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Limits token choices to top K most likely options (40 = consider 40 tokens)</p>
                             </div>
 
                             <div>
@@ -252,7 +256,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="1.1"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Repetition penalty (0-2)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Discourages repetition: 1.0 = no penalty, 1.1 = slight penalty, 2.0 = strong penalty</p>
                             </div>
                         </div>
                     </div>
@@ -262,57 +266,69 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                     <h2 className="text-xl font-semibold mb-4 dark:text-white">RAG Configuration</h2>
                     <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                            <input
-                                type="checkbox"
-                                id="useAdvancedRAG"
-                                name="useAdvancedRAG"
-                                className="w-4 h-4"
-                                defaultChecked
-                            />
-                            <label htmlFor="useAdvancedRAG" className="text-sm font-medium dark:text-gray-200">
-                                Use Advanced RAG (multi-query, hybrid search, re-ranking)
-                            </label>
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="checkbox"
+                                    id="useAdvancedRAG"
+                                    name="useAdvancedRAG"
+                                    className="w-4 h-4"
+                                    defaultChecked
+                                />
+                                <label htmlFor="useAdvancedRAG" className="text-sm font-medium dark:text-gray-200">
+                                    Use Advanced RAG
+                                </label>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Enables sophisticated retrieval techniques for better context matching</p>
                         </div>
 
-                        <div className="pl-7 space-y-3 border-l-2 border-gray-200">
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="ragUseMultiQuery"
-                                    name="ragUseMultiQuery"
-                                    className="w-4 h-4"
-                                    defaultChecked
-                                />
-                                <label htmlFor="ragUseMultiQuery" className="text-sm dark:text-gray-300">
-                                    Multi-Query Retrieval
-                                </label>
+                        <div className="pl-7 space-y-3 border-l-2 border-gray-200 dark:border-gray-700">
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="ragUseMultiQuery"
+                                        name="ragUseMultiQuery"
+                                        className="w-4 h-4"
+                                        defaultChecked
+                                    />
+                                    <label htmlFor="ragUseMultiQuery" className="text-sm dark:text-gray-300">
+                                        Multi-Query Retrieval
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Generates multiple search variations to find more relevant context</p>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="ragUseHybridSearch"
-                                    name="ragUseHybridSearch"
-                                    className="w-4 h-4"
-                                    defaultChecked
-                                />
-                                <label htmlFor="ragUseHybridSearch" className="text-sm dark:text-gray-300">
-                                    Hybrid Search (Vector + Keyword)
-                                </label>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="ragUseHybridSearch"
+                                        name="ragUseHybridSearch"
+                                        className="w-4 h-4"
+                                        defaultChecked
+                                    />
+                                    <label htmlFor="ragUseHybridSearch" className="text-sm dark:text-gray-300">
+                                        Hybrid Search
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Combines semantic (vector) and keyword (BM25) search for better results</p>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="ragUseReranking"
-                                    name="ragUseReranking"
-                                    className="w-4 h-4"
-                                    defaultChecked
-                                />
-                                <label htmlFor="ragUseReranking" className="text-sm dark:text-gray-300">
-                                    Re-ranking
-                                </label>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="ragUseReranking"
+                                        name="ragUseReranking"
+                                        className="w-4 h-4"
+                                        defaultChecked
+                                    />
+                                    <label htmlFor="ragUseReranking" className="text-sm dark:text-gray-300">
+                                        Re-ranking
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Reorders search results by relevance for higher quality context</p>
                             </div>
                         </div>
 
@@ -330,7 +346,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="5"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum chunks to retrieve</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum number of document chunks to include in context (higher = more info, slower)</p>
                             </div>
 
                             <div>
@@ -347,7 +363,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="0.1"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum relevance (0-1)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum similarity score to include a chunk (0.1 = very lenient, 0.7 = strict)</p>
                             </div>
                         </div>
                     </div>
@@ -385,6 +401,9 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                 {/* System Prompt */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                     <h2 className="text-xl font-semibold mb-4 dark:text-white">System Prompt *</h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                        Define the AI's role, personality, and behaviour. This instruction is sent with every message.
+                    </p>
                     <textarea
                         id="systemPrompt"
                         name="systemPrompt"
@@ -416,6 +435,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 defaultValue="16384"
                                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                             />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total tokens for conversation history + documents (check your model's limit)</p>
                         </div>
 
                         <div>
@@ -431,6 +451,7 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 defaultValue="4096"
                                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                             />
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum length of AI responses (higher allows longer answers)</p>
                         </div>
                     </div>
                 </div>

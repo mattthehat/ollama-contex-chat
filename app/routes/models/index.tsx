@@ -23,7 +23,7 @@ export default function ModelsIndex({ loaderData }: Route.ComponentProps) {
                 <div>
                     <h1 className="text-3xl font-bold dark:text-white">AI Models</h1>
                     <p className="text-gray-600 dark:text-gray-400 mt-2">
-                        Create specialized AI assistants with custom configurations and document libraries
+                        Create specialised AI assistants with custom configurations and document libraries
                     </p>
                 </div>
                 <Link
