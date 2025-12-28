@@ -154,9 +154,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         ? text.slice(0, maxChars)
         : text;
 
-    if (text.length > maxChars) {
-        console.warn(`[Embedding] Text truncated from ${text.length} to ${maxChars} chars (${Math.round(text.length/4)} → ${Math.round(maxChars/4)} est. tokens)`);
-    }
+    // Text truncation is expected behavior for long chunks
 
     const response = await fetch('http://localhost:11434/api/embed', {
         method: 'POST',
@@ -203,7 +201,6 @@ async function generateEmbeddingsInBatches(
     batchSize: number = 10
 ): Promise<number[][]> {
     const results: number[][] = [];
-    const startTime = Date.now();
 
     for (let i = 0; i < chunks.length; i += batchSize) {
         const batch = chunks.slice(i, i + batchSize);
@@ -213,9 +210,7 @@ async function generateEmbeddingsInBatches(
         results.push(...batchEmbeddings);
     }
 
-    const totalTime = Date.now() - startTime;
-    console.log(`[Embedding] Generated ${chunks.length} embeddings in ${totalTime}ms (${Math.round(totalTime / chunks.length)}ms/chunk avg)`);
-
+    // Embeddings generated successfully
     return results;
 }
 
@@ -232,12 +227,11 @@ function splitIntoSentences(text: string): string[] {
 /**
  * Chunk text into smaller pieces for embedding
  * Uses sentence boundaries to maintain semantic coherence
- * Ultra-conservative 300 char limit to guarantee fit within 2048 token limit
  */
 export function chunkText(
     text: string,
-    maxChunkSize: number = 300,
-    overlap: number = 50
+    maxChunkSize: number = 700,
+    overlap: number = 100
 ): string[] {
     const chunks: string[] = [];
     const sentences = splitIntoSentences(text);
@@ -327,12 +321,11 @@ export function chunkText(
 /**
  * Chunk code while preserving function/class boundaries
  * Attempts to keep logical code blocks together
- * Ultra-conservative 300 chars to account for code's high token density
  */
 export function chunkCode(
     code: string,
-    maxChunkSize: number = 300,
-    overlap: number = 50
+    maxChunkSize: number = 700,
+    overlap: number = 100
 ): string[] {
     const chunks: string[] = [];
     const lines = code.split('\n');
@@ -391,11 +384,10 @@ export function chunkCode(
 /**
  * Chunk markdown by sections (headers) while maintaining hierarchy
  * Returns chunks with metadata including the full heading hierarchy
- * Ultra-conservative 300 char hard limit with strict enforcement
  */
 export function chunkMarkdown(
     markdown: string,
-    maxChunkSize: number = 300
+    maxChunkSize: number = 700
 ): Array<{ text: string; metadata: { section?: string; hierarchy?: string[] } }> {
     const chunks: Array<{ text: string; metadata: { section?: string; hierarchy?: string[] } }> = [];
     const lines = markdown.split('\n');
@@ -658,7 +650,7 @@ export async function getAllDocuments(): Promise<Document[]> {
         []
     );
 
-    console.log('[getAllDocuments] Returned', result.rows.length, 'documents:', result.rows.map(d => ({ id: d.documentId, uuid: d.documentUUID, title: d.documentTitle })));
+    // Documents retrieved successfully
     return result.rows;
 }
 
@@ -958,12 +950,7 @@ export async function searchChunksInDocuments(
     documentUUIDs: string[],
     limit: number = 5
 ): Promise<DocumentChunkWithSimilarity[]> {
-    console.log('[searchChunksInDocuments] Query:', query.substring(0, 100) + '...');
-    console.log('[searchChunksInDocuments] Document UUIDs:', documentUUIDs);
-    console.log('[searchChunksInDocuments] Limit:', limit);
-
     if (documentUUIDs.length === 0) {
-        console.log('[searchChunksInDocuments] No document UUIDs provided, returning empty');
         return [];
     }
 
@@ -995,10 +982,7 @@ export async function searchChunksInDocuments(
         ? result as DocumentChunkWithSimilarity[]
         : ((result as any)?.rows || []) as DocumentChunkWithSimilarity[];
 
-    console.log('[searchChunksInDocuments] Found', chunks.length, 'chunks');
-    if (chunks.length > 0) {
-        console.log('[searchChunksInDocuments] Top similarities:', chunks.slice(0, 3).map(c => c.similarity));
-    }
+    // Vector search completed
 
     return chunks;
 }
@@ -1034,8 +1018,6 @@ export async function buildRAGContext(
     }
 
     // Use standard RAG (existing implementation below)
-    const startTime = Date.now();
-
     if (documentUUIDs.length === 0) {
         return '';
     }
@@ -1050,8 +1032,7 @@ export async function buildRAGContext(
         .map(m => m.content);
 
     if (recentUserMessages.length > 0) {
-        // Current message gets more weight by appearing twice
-        contextualQuery = `${currentMessage} ${currentMessage} ${recentUserMessages.join(' ')}`;
+        contextualQuery = `${currentMessage} ${recentUserMessages.join(' ')}`;
     }
 
     // Limit query length to prevent overly long embeddings (max ~500 words)
@@ -1063,14 +1044,11 @@ export async function buildRAGContext(
     const relevantChunks = chunks.filter(chunk => chunk.similarity > similarityThreshold);
 
     if (relevantChunks.length === 0) {
-        console.log(`[RAG] No chunks above similarity threshold ${similarityThreshold}`);
+        // No relevant chunks found for this query
         return '';
     }
 
-    const searchTime = Date.now() - startTime;
-    const avgSimilarity = relevantChunks.reduce((sum, c) => sum + c.similarity, 0) / relevantChunks.length;
-
-    console.log(`[RAG] Search: ${searchTime}ms | Chunks: ${relevantChunks.length}/${chunks.length} | Avg Similarity: ${avgSimilarity.toFixed(3)}`);
+    // RAG context built successfully
 
     // Format chunks with natural context (no chunk numbers or artificial instructions)
     const contextParts = relevantChunks.map((chunk) => {

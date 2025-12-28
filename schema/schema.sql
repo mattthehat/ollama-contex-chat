@@ -66,6 +66,7 @@ CREATE TABLE `document_chunks` (
   KEY `idx_document` (`chunkDocumentId`),
   KEY `idx_index` (`chunkIndex`),
   KEY `idx_created` (`chunkCreatedAt`),
+  FULLTEXT KEY `idx_content_fulltext` (`chunkContent`),
   VECTOR KEY `chunkEmbedding` (`chunkEmbedding`) `M`=16 `DISTANCE`=cosine,
   CONSTRAINT `fk_chunk_document` FOREIGN KEY (`chunkDocumentId`) REFERENCES `documents` (`documentId`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

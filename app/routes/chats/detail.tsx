@@ -177,7 +177,6 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [thinking, setThinking] = useState(false);
     const [currentUserMessage, setCurrentUserMessage] = useState<string>('');
-    const [showDebug, setShowDebug] = useState(false);
     const hasSavedRef = useRef(false);
     const processedMessageRef = useRef<string>('');
 
@@ -283,72 +282,6 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
                 <ChatMessage
                     message={{ role: 'assistant', content: ollama.response }}
                 />
-            )}
-
-            {/* Debug Panel */}
-            {actionData && (
-                <div className="my-6 border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
-                    <button
-                        type="button"
-                        onClick={() => setShowDebug(!showDebug)}
-                        className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-left font-medium text-sm flex items-center justify-between transition-colors"
-                    >
-                        <span className="dark:text-white">Debug Information</span>
-                        <span className="text-gray-500 dark:text-gray-400">
-                            {showDebug ? '▼' : '▶'}
-                        </span>
-                    </button>
-                    {showDebug && (
-                        <div className="p-4 bg-white dark:bg-gray-800 space-y-4 text-sm">
-                            {/* Model Configuration */}
-                            {actionData.modelConfig && (
-                                <div>
-                                    <h3 className="font-semibold mb-2 dark:text-white">Model Configuration</h3>
-                                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded border border-gray-200 dark:border-gray-700">
-                                        <div className="grid grid-cols-2 gap-2 text-xs">
-                                            <div className="dark:text-gray-300"><span className="font-medium">Model:</span> {actionData.model}</div>
-                                            <div className="dark:text-gray-300"><span className="font-medium">Temperature:</span> {actionData.modelConfig.temperature}</div>
-                                            <div className="dark:text-gray-300"><span className="font-medium">Top P:</span> {actionData.modelConfig.top_p}</div>
-                                            <div className="dark:text-gray-300"><span className="font-medium">Top K:</span> {actionData.modelConfig.top_k}</div>
-                                            <div className="dark:text-gray-300"><span className="font-medium">Repeat Penalty:</span> {actionData.modelConfig.repeat_penalty}</div>
-                                            {actionData.modelConfig.seed && (
-                                                <div className="dark:text-gray-300"><span className="font-medium">Seed:</span> {actionData.modelConfig.seed}</div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* System Prompt */}
-                            {actionData.systemPrompt && (
-                                <div>
-                                    <h3 className="font-semibold mb-2 dark:text-white">System Prompt</h3>
-                                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded border border-gray-200 dark:border-gray-700">
-                                        <pre className="text-xs whitespace-pre-wrap font-mono dark:text-gray-300">{actionData.systemPrompt}</pre>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* RAG Context */}
-                            {actionData.ragContext && (
-                                <div>
-                                    <h3 className="font-semibold mb-2 dark:text-white">
-                                        RAG Context ({actionData.selectedDocs.length} documents)
-                                    </h3>
-                                    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded border border-gray-200 dark:border-gray-700 max-h-96 overflow-y-auto">
-                                        <pre className="text-xs whitespace-pre-wrap font-mono dark:text-gray-300">{actionData.ragContext}</pre>
-                                    </div>
-                                </div>
-                            )}
-
-                            {!actionData.ragContext && (
-                                <div className="text-gray-500 dark:text-gray-400 text-xs italic">
-                                    No RAG context used for this query
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
             )}
 
             <fetcher.Form method="post" className="my-6">

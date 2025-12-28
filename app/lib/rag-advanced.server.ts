@@ -206,8 +206,6 @@ export async function multiQueryRetrieval(
     const queryType = classifyQuery(query);
     const variations = await generateQueryVariations(query, queryType);
 
-    console.log(`[Multi-Query] Type: ${queryType} | Variations: ${variations.length}`);
-
     // Search with each query variation
     const searchResults: DocumentChunkWithSimilarity[][] = [];
 
@@ -240,11 +238,6 @@ export async function multiQueryRetrieval(
 
     // Combine results using RRF
     const fusedResults = reciprocalRankFusion(searchResults);
-
-    console.log(`[Multi-Query] Found ${fusedResults.length} fused results`);
-    if (fusedResults.length > 0) {
-        console.log(`[Multi-Query] Top RRF scores:`, fusedResults.slice(0, 3).map(c => c.similarity.toFixed(4)));
-    }
 
     // Note: Don't filter by similarityThreshold here since RRF scores are not comparable to cosine similarity
     // RRF scores typically range from ~0.016 (top rank) down to near zero
@@ -418,10 +411,7 @@ export async function buildAdvancedRAGContext(
         ? chunks.slice(0, maxChunks)
         : chunks.filter(chunk => chunk.similarity > similarityThreshold).slice(0, maxChunks);
 
-    console.log(`[Advanced RAG] After filtering: ${relevantChunks.length} chunks (from ${chunks.length} candidates)`);
-
     if (relevantChunks.length === 0) {
-        console.log(`[Advanced RAG] No chunks passed filtering (useMultiQuery: ${useMultiQuery}, useReranking: ${useReranking}, threshold: ${similarityThreshold})`);
         return {
             context: '',
             metadata: {
@@ -434,8 +424,6 @@ export async function buildAdvancedRAGContext(
 
     const searchTime = Date.now() - startTime;
     const avgSimilarity = relevantChunks.reduce((sum, c) => sum + c.similarity, 0) / relevantChunks.length;
-
-    console.log(`[Advanced RAG] Query Type: ${queryType} | Time: ${searchTime}ms | Chunks: ${relevantChunks.length} | Avg Similarity: ${avgSimilarity.toFixed(3)}`);
 
     // Format chunks with natural context (no chunk numbers or artificial instructions)
     const contextParts = relevantChunks.map((chunk) => {
@@ -518,17 +506,17 @@ export function getAdaptiveChunkSize(
     documentType: string,
     averageTokenDensity: number = 4 // chars per token
 ): number {
-    const baseChunkSize = 300; // Conservative base
+    const baseChunkSize = 700; // Increased for better semantic coherence
 
     switch (documentType) {
         case 'code':
             // Code has high token density, use smaller chunks
-            return Math.floor(baseChunkSize * 0.7); // ~210 chars
+            return Math.floor(baseChunkSize * 0.7); // ~490 chars
 
         case 'documentation':
         case 'markdown':
             // Well-structured content, can use larger chunks
-            return Math.floor(baseChunkSize * 1.2); // ~360 chars
+            return Math.floor(baseChunkSize * 1.2); // ~840 chars
 
         case 'pdf':
             // PDFs vary, use base size
