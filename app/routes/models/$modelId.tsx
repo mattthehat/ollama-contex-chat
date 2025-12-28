@@ -1,6 +1,10 @@
 import type { Route } from './+types/$modelId';
 import { Form, redirect, useActionData } from 'react-router';
-import { getCustomModelWithDocuments, updateCustomModel, deleteCustomModel } from '~/lib/models.server';
+import {
+    getCustomModelWithDocuments,
+    updateCustomModel,
+    deleteCustomModel,
+} from '~/lib/models.server';
 import { getAllDocuments } from '~/lib/document.server';
 import config from '~/lib/config';
 
@@ -11,9 +15,9 @@ export const loader = async ({ params }: Route.LoaderArgs) => {
     }
 
     const allDocuments = await getAllDocuments();
-    const availableModels = config.chatModels.map(m => ({
+    const availableModels = config.chatModels.map((m) => ({
         id: m.modelName,
-        name: m.friendlyName
+        name: m.friendlyName,
     }));
     return { model, allDocuments, availableModels };
 };
@@ -24,7 +28,10 @@ export const meta = ({ data }: Route.MetaArgs) => {
     }
     return [
         { title: `${data.model.modelName} - Ollama Context Chat` },
-        { name: 'description', content: data.model.modelDescription || 'Custom AI model' },
+        {
+            name: 'description',
+            content: data.model.modelDescription || 'Custom AI model',
+        },
     ];
 };
 
@@ -52,13 +59,21 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     const ollamaModel = formData.get('ollamaModel') as string;
     const systemPrompt = formData.get('systemPrompt') as string;
 
-    const ollamaTemperature = parseFloat(formData.get('ollamaTemperature') as string);
+    const ollamaTemperature = parseFloat(
+        formData.get('ollamaTemperature') as string
+    );
     const ollamaTopP = parseFloat(formData.get('ollamaTopP') as string);
     const ollamaTopK = parseInt(formData.get('ollamaTopK') as string);
-    const ollamaRepeatPenalty = parseFloat(formData.get('ollamaRepeatPenalty') as string);
+    const ollamaRepeatPenalty = parseFloat(
+        formData.get('ollamaRepeatPenalty') as string
+    );
     const ragMaxChunks = parseInt(formData.get('ragMaxChunks') as string);
-    const ragSimilarityThreshold = parseFloat(formData.get('ragSimilarityThreshold') as string);
-    const maxContextTokens = parseInt(formData.get('maxContextTokens') as string);
+    const ragSimilarityThreshold = parseFloat(
+        formData.get('ragSimilarityThreshold') as string
+    );
+    const maxContextTokens = parseInt(
+        formData.get('maxContextTokens') as string
+    );
     const maxOutputTokens = parseInt(formData.get('maxOutputTokens') as string);
 
     const useAdvancedRAG = formData.get('useAdvancedRAG') === 'on';
@@ -66,7 +81,9 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     const ragUseHybridSearch = formData.get('ragUseHybridSearch') === 'on';
     const ragUseReranking = formData.get('ragUseReranking') === 'on';
 
-    const documentIds = formData.getAll('documents').map((id) => parseInt(id as string));
+    const documentIds = formData
+        .getAll('documents')
+        .map((id) => parseInt(id as string));
 
     const errors: ActionData['errors'] = {};
 
@@ -116,7 +133,9 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 export default function ModelDetail({ loaderData }: Route.ComponentProps) {
     const { model, allDocuments, availableModels } = loaderData;
     const actionData = useActionData<ActionData>();
-    const selectedDocumentIds = new Set(model.documents.map(d => d.documentId));
+    const selectedDocumentIds = new Set(
+        model.documents.map((d) => d.documentId)
+    );
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -135,10 +154,15 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
             <Form method="post" className="space-y-8">
                 {/* Same form structure as new.tsx, but with defaultValues from model */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Basic Information</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Basic Information
+                    </h2>
                     <div className="space-y-4">
                         <div>
-                            <label htmlFor="modelName" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="modelName"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Model Name *
                             </label>
                             <input
@@ -150,12 +174,17 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                 required
                             />
                             {actionData?.errors?.modelName && (
-                                <p className="text-red-600 dark:text-red-400 text-sm mt-1">{actionData.errors.modelName}</p>
+                                <p className="text-red-600 dark:text-red-400 text-sm mt-1">
+                                    {actionData.errors.modelName}
+                                </p>
                             )}
                         </div>
 
                         <div>
-                            <label htmlFor="modelIcon" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="modelIcon"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Icon (Emoji)
                             </label>
                             <input
@@ -169,7 +198,10 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                         </div>
 
                         <div>
-                            <label htmlFor="modelDescription" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="modelDescription"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Description
                             </label>
                             <textarea
@@ -185,10 +217,15 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
 
                 {/* Ollama Configuration */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Ollama Configuration</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Ollama Configuration
+                    </h2>
                     <div className="space-y-4">
                         <div>
-                            <label htmlFor="ollamaModel" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="ollamaModel"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Base Model *
                             </label>
                             <select
@@ -208,7 +245,9 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">Temperature</label>
+                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                    Temperature
+                                </label>
                                 <input
                                     type="number"
                                     name="ollamaTemperature"
@@ -220,7 +259,9 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">Top P</label>
+                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                    Top P
+                                </label>
                                 <input
                                     type="number"
                                     name="ollamaTopP"
@@ -232,7 +273,9 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">Top K</label>
+                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                    Top K
+                                </label>
                                 <input
                                     type="number"
                                     name="ollamaTopK"
@@ -243,7 +286,9 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">Repeat Penalty</label>
+                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                    Repeat Penalty
+                                </label>
                                 <input
                                     type="number"
                                     name="ollamaRepeatPenalty"
@@ -260,7 +305,9 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
 
                 {/* RAG Configuration */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">RAG Configuration</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        RAG Configuration
+                    </h2>
                     <div className="space-y-4">
                         <div className="flex items-center gap-3">
                             <input
@@ -270,7 +317,10 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                 defaultChecked={model.useAdvancedRAG}
                                 className="w-4 h-4"
                             />
-                            <label htmlFor="useAdvancedRAG" className="text-sm font-medium dark:text-gray-200">
+                            <label
+                                htmlFor="useAdvancedRAG"
+                                className="text-sm font-medium dark:text-gray-200"
+                            >
                                 Use Advanced RAG
                             </label>
                         </div>
@@ -284,7 +334,10 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                     defaultChecked={model.ragUseMultiQuery}
                                     className="w-4 h-4"
                                 />
-                                <label htmlFor="ragUseMultiQuery" className="text-sm dark:text-gray-300">
+                                <label
+                                    htmlFor="ragUseMultiQuery"
+                                    className="text-sm dark:text-gray-300"
+                                >
                                     Multi-Query Retrieval
                                 </label>
                             </div>
@@ -296,7 +349,10 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                     defaultChecked={model.ragUseHybridSearch}
                                     className="w-4 h-4"
                                 />
-                                <label htmlFor="ragUseHybridSearch" className="text-sm dark:text-gray-300">
+                                <label
+                                    htmlFor="ragUseHybridSearch"
+                                    className="text-sm dark:text-gray-300"
+                                >
                                     Hybrid Search
                                 </label>
                             </div>
@@ -308,7 +364,10 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                     defaultChecked={model.ragUseReranking}
                                     className="w-4 h-4"
                                 />
-                                <label htmlFor="ragUseReranking" className="text-sm dark:text-gray-300">
+                                <label
+                                    htmlFor="ragUseReranking"
+                                    className="text-sm dark:text-gray-300"
+                                >
                                     Re-ranking
                                 </label>
                             </div>
@@ -316,7 +375,9 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">Max Chunks</label>
+                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                    Max Chunks
+                                </label>
                                 <input
                                     type="number"
                                     name="ragMaxChunks"
@@ -327,7 +388,9 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">Similarity Threshold</label>
+                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                    Similarity Threshold
+                                </label>
                                 <input
                                     type="number"
                                     name="ragSimilarityThreshold"
@@ -344,27 +407,41 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
 
                 {/* Document Library */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Document Library</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Document Library
+                    </h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                         Currently selected: {model.documents.length} documents
                     </p>
                     <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:bg-gray-750">
                         {allDocuments.length === 0 ? (
-                            <p className="text-gray-500 dark:text-gray-400 text-sm">No documents available</p>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm">
+                                No documents available
+                            </p>
                         ) : (
                             allDocuments.map((doc) => (
-                                <div key={doc.documentUUID} className="flex items-center gap-3">
+                                <div
+                                    key={doc.documentUUID}
+                                    className="flex items-center gap-3"
+                                >
                                     <input
                                         type="checkbox"
                                         id={`doc-${doc.documentUUID}`}
                                         name="documents"
                                         value={doc.documentId}
-                                        defaultChecked={selectedDocumentIds.has(doc.documentId)}
+                                        defaultChecked={selectedDocumentIds.has(
+                                            doc.documentId
+                                        )}
                                         className="w-4 h-4"
                                     />
-                                    <label htmlFor={`doc-${doc.documentUUID}`} className="text-sm flex-1">
+                                    <label
+                                        htmlFor={`doc-${doc.documentUUID}`}
+                                        className="text-sm flex-1"
+                                    >
                                         {doc.documentTitle}
-                                        <span className="text-gray-500 dark:text-gray-400 ml-2">({doc.documentType})</span>
+                                        <span className="text-gray-500 dark:text-gray-400 ml-2">
+                                            ({doc.documentType})
+                                        </span>
                                     </label>
                                 </div>
                             ))
@@ -374,10 +451,12 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
 
                 {/* System Prompt */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">System Prompt *</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        System Prompt *
+                    </h2>
                     <textarea
                         name="systemPrompt"
-                        rows={6}
+                        rows={32}
                         defaultValue={model.systemPrompt}
                         className="w-full border border-gray-300 rounded-lg px-4 py-2 font-mono text-sm"
                         required
@@ -386,10 +465,14 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
 
                 {/* Context Settings */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Context Settings</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Context Settings
+                    </h2>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium mb-1 dark:text-gray-200">Max Context Tokens</label>
+                            <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                Max Context Tokens
+                            </label>
                             <input
                                 type="number"
                                 name="maxContextTokens"
@@ -400,7 +483,9 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-1 dark:text-gray-200">Max Output Tokens</label>
+                            <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                Max Output Tokens
+                            </label>
                             <input
                                 type="number"
                                 name="maxOutputTokens"
@@ -437,7 +522,11 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                             value="delete"
                             className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-lg font-medium transition-colors"
                             onClick={(e) => {
-                                if (!confirm('Are you sure you want to delete this model?')) {
+                                if (
+                                    !confirm(
+                                        'Are you sure you want to delete this model?'
+                                    )
+                                ) {
                                     e.preventDefault();
                                 }
                             }}
