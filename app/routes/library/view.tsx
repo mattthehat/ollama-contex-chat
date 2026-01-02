@@ -66,6 +66,7 @@ export async function action({ request }: Route.ActionArgs) {
 export default function LibraryView() {
     const { document, chunks } = useLoaderData<typeof loader>();
     const fetcher = useFetcher<typeof action>();
+    const deleteFetcher = useFetcher();
     const [showAllChunks, setShowAllChunks] = useState(false);
 
     const metadata =
@@ -88,9 +89,39 @@ export default function LibraryView() {
             </div>
 
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-                <h1 className="text-3xl font-bold mb-4">
-                    {document.documentTitle}
-                </h1>
+                <div className="flex justify-between items-start mb-4">
+                    <h1 className="text-3xl font-bold">
+                        {document.documentTitle}
+                    </h1>
+                    <deleteFetcher.Form
+                        method="post"
+                        action="/library/delete"
+                        onSubmit={(e) => {
+                            if (
+                                !confirm(
+                                    `Are you sure you want to delete "${document.documentTitle}"? This action cannot be undone.`
+                                )
+                            ) {
+                                e.preventDefault();
+                            }
+                        }}
+                    >
+                        <input
+                            type="hidden"
+                            name="documentUUID"
+                            value={document.documentUUID}
+                        />
+                        <button
+                            type="submit"
+                            disabled={deleteFetcher.state === 'submitting'}
+                            className="px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {deleteFetcher.state === 'submitting'
+                                ? 'Deleting...'
+                                : 'Delete Document'}
+                        </button>
+                    </deleteFetcher.Form>
+                </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>

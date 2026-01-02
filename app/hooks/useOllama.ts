@@ -64,7 +64,10 @@ export function useOllama() {
             // Add model options if provided, filtering out undefined/null values
             if (options) {
                 const cleanOptions: Record<string, number> = {};
-                if (options.temperature !== undefined && options.temperature !== null) {
+                if (
+                    options.temperature !== undefined &&
+                    options.temperature !== null
+                ) {
                     cleanOptions.temperature = options.temperature;
                 }
                 if (options.top_p !== undefined && options.top_p !== null) {
@@ -73,7 +76,10 @@ export function useOllama() {
                 if (options.top_k !== undefined && options.top_k !== null) {
                     cleanOptions.top_k = options.top_k;
                 }
-                if (options.repeat_penalty !== undefined && options.repeat_penalty !== null) {
+                if (
+                    options.repeat_penalty !== undefined &&
+                    options.repeat_penalty !== null
+                ) {
                     cleanOptions.repeat_penalty = options.repeat_penalty;
                 }
                 if (options.seed !== undefined && options.seed !== null) {
@@ -99,7 +105,9 @@ export function useOllama() {
 
                 if (!fetchResponse.ok) {
                     const errorText = await fetchResponse.text();
-                    throw new Error(`Failed to fetch from Ollama API: ${fetchResponse.status} - ${errorText}`);
+                    throw new Error(
+                        `Failed to fetch from Ollama API: ${fetchResponse.status} - ${errorText}`
+                    );
                 }
 
                 const reader = fetchResponse.body?.getReader();

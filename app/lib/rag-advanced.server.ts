@@ -11,7 +11,12 @@ import config from './config';
 /**
  * Query classification types
  */
-export type QueryType = 'factual' | 'comparative' | 'summary' | 'procedural' | 'exploratory';
+export type QueryType =
+    | 'factual'
+    | 'comparative'
+    | 'summary'
+    | 'procedural'
+    | 'exploratory';
 
 /**
  * Classify user query to determine best retrieval strategy
@@ -25,17 +30,23 @@ export function classifyQuery(query: string): QueryType {
     }
 
     // Comparative: compare, difference, versus, vs
-    if (lowerQuery.match(/\b(compare|difference|versus|vs|better|worse|contrast)\b/)) {
+    if (
+        lowerQuery.match(
+            /\b(compare|difference|versus|vs|better|worse|contrast)\b/
+        )
+    ) {
         return 'comparative';
     }
 
     // Summary: summarize, overview, explain
-    if (lowerQuery.match(/\b(summarize|summary|overview|explain|describe)\b/)) {
+    if (lowerQuery.match(/\b(summarise|summary|overview|explain|describe)\b/)) {
         return 'summary';
     }
 
     // Procedural: how to, steps, procedure
-    if (lowerQuery.match(/\b(how to|steps|procedure|process|guide|tutorial)\b/)) {
+    if (
+        lowerQuery.match(/\b(how to|steps|procedure|process|guide|tutorial)\b/)
+    ) {
         return 'procedural';
     }
 
@@ -57,14 +68,19 @@ export async function generateQueryVariations(
     switch (queryType) {
         case 'factual':
             // Rephrase as statement
-            variations.push(originalQuery.replace(/^(what|who|where|when|which)\s+(is|are|was|were)\s+/i, ''));
+            variations.push(
+                originalQuery.replace(
+                    /^(what|who|where|when|which)\s+(is|are|was|were)\s+/i,
+                    ''
+                )
+            );
             break;
 
         case 'comparative':
             // Split into individual queries
             const parts = originalQuery.split(/\b(vs|versus|and|or)\b/i);
             if (parts.length > 1) {
-                parts.forEach(part => {
+                parts.forEach((part) => {
                     const cleaned = part.trim();
                     if (cleaned.length > 10) variations.push(cleaned);
                 });
@@ -73,17 +89,28 @@ export async function generateQueryVariations(
 
         case 'summary':
             // Remove summary-specific words
-            variations.push(originalQuery.replace(/\b(summarize|summary|overview|explain|describe)\b/gi, '').trim());
+            variations.push(
+                originalQuery
+                    .replace(
+                        /\b(summarise|summary|overview|explain|describe)\b/gi,
+                        ''
+                    )
+                    .trim()
+            );
             break;
 
         case 'procedural':
             // Remove procedural markers
-            variations.push(originalQuery.replace(/\b(how to|steps to|procedure for)\b/gi, '').trim());
+            variations.push(
+                originalQuery
+                    .replace(/\b(how to|steps to|procedure for)\b/gi, '')
+                    .trim()
+            );
             break;
     }
 
     // Remove duplicates and empty strings
-    return [...new Set(variations)].filter(v => v.length > 5);
+    return [...new Set(variations)].filter((v) => v.length > 5);
 }
 
 /**
@@ -105,10 +132,35 @@ export async function hybridSearch(
     const placeholders = documentUUIDs.map(() => '?').join(',');
 
     // Extract keywords from query (remove stop words)
-    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be', 'been', 'being']);
-    const keywords = query.toLowerCase()
+    const stopWords = new Set([
+        'the',
+        'a',
+        'an',
+        'and',
+        'or',
+        'but',
+        'in',
+        'on',
+        'at',
+        'to',
+        'for',
+        'of',
+        'with',
+        'by',
+        'from',
+        'as',
+        'is',
+        'was',
+        'are',
+        'were',
+        'be',
+        'been',
+        'being',
+    ]);
+    const keywords = query
+        .toLowerCase()
         .split(/\s+/)
-        .filter(word => word.length > 2 && !stopWords.has(word))
+        .filter((word) => word.length > 2 && !stopWords.has(word))
         .join(' ');
 
     // Perform hybrid search combining vector similarity with keyword relevance
@@ -143,7 +195,7 @@ export async function hybridSearch(
             `%${keywords}%`,
             1 - vectorWeight,
             ...documentUUIDs,
-            limit
+            limit,
         ]
     );
 
@@ -163,7 +215,10 @@ export function reciprocalRankFusion(
     rankedLists: DocumentChunkWithSimilarity[][],
     k: number = 60
 ): DocumentChunkWithSimilarity[] {
-    const rrfScores = new Map<number, { chunk: DocumentChunkWithSimilarity; score: number }>();
+    const rrfScores = new Map<
+        number,
+        { chunk: DocumentChunkWithSimilarity; score: number }
+    >();
 
     // Calculate RRF score for each chunk
     for (const list of rankedLists) {
@@ -176,7 +231,7 @@ export function reciprocalRankFusion(
             } else {
                 rrfScores.set(chunk.chunkId, {
                     chunk: { ...chunk },
-                    score: rrfScore
+                    score: rrfScore,
                 });
             }
         });
@@ -187,7 +242,7 @@ export function reciprocalRankFusion(
         .sort((a, b) => b.score - a.score)
         .map(({ chunk, score }) => ({
             ...chunk,
-            similarity: score // Replace original similarity with RRF score
+            similarity: score, // Replace original similarity with RRF score
         }));
 
     return results;
@@ -232,7 +287,9 @@ export async function multiQueryRetrieval(
             [embeddingJson, ...documentUUIDs, limit]
         );
 
-        const chunks = Array.isArray(result) ? result : ((result as any)?.rows || []);
+        const chunks = Array.isArray(result)
+            ? result
+            : (result as any)?.rows || [];
         searchResults.push(chunks as DocumentChunkWithSimilarity[]);
     }
 
@@ -255,23 +312,26 @@ export function reRankChunks(
     chunks: DocumentChunkWithSimilarity[]
 ): DocumentChunkWithSimilarity[] {
     const queryTerms = new Set(
-        query.toLowerCase()
+        query
+            .toLowerCase()
             .split(/\W+/)
-            .filter(term => term.length > 3)
+            .filter((term) => term.length > 3)
     );
 
-    const reranked = chunks.map(chunk => {
+    const reranked = chunks.map((chunk) => {
         const chunkTerms = chunk.chunkContent.toLowerCase().split(/\W+/);
-        const matchCount = chunkTerms.filter(term => queryTerms.has(term)).length;
+        const matchCount = chunkTerms.filter((term) =>
+            queryTerms.has(term)
+        ).length;
         const matchRatio = matchCount / queryTerms.size;
 
         // Combine original similarity with keyword match ratio
         // 80% original score, 20% keyword match
-        const rerankedScore = (chunk.similarity * 0.8) + (matchRatio * 0.2);
+        const rerankedScore = chunk.similarity * 0.8 + matchRatio * 0.2;
 
         return {
             ...chunk,
-            similarity: rerankedScore
+            similarity: rerankedScore,
         };
     });
 
@@ -313,10 +373,14 @@ export function deduplicateChunks(
                 // Merge consecutive chunks
                 const merged: DocumentChunkWithSimilarity = {
                     ...chunk,
-                    chunkContent: chunk.chunkIndex < nextChunk.chunkIndex
-                        ? `${chunk.chunkContent}\n\n${nextChunk.chunkContent}`
-                        : `${nextChunk.chunkContent}\n\n${chunk.chunkContent}`,
-                    similarity: Math.max(chunk.similarity, nextChunk.similarity)
+                    chunkContent:
+                        chunk.chunkIndex < nextChunk.chunkIndex
+                            ? `${chunk.chunkContent}\n\n${nextChunk.chunkContent}`
+                            : `${nextChunk.chunkContent}\n\n${chunk.chunkContent}`,
+                    similarity: Math.max(
+                        chunk.similarity,
+                        nextChunk.similarity
+                    ),
                 };
 
                 deduplicated.push(merged);
@@ -393,7 +457,7 @@ export async function buildAdvancedRAGContext(
             [embeddingJson, ...documentUUIDs, maxChunks * 2]
         );
 
-        chunks = Array.isArray(result) ? result : ((result as any)?.rows || []);
+        chunks = Array.isArray(result) ? result : (result as any)?.rows || [];
     }
 
     // Apply re-ranking if enabled
@@ -407,9 +471,12 @@ export async function buildAdvancedRAGContext(
     // When using multi-query or re-ranking, similarity scores are RRF scores (not cosine similarity)
     // RRF scores range from ~0.016 down to near zero, so don't filter by similarity threshold
     // Only apply threshold filtering for standard vector search without RRF
-    const relevantChunks = (useMultiQuery || useReranking)
-        ? chunks.slice(0, maxChunks)
-        : chunks.filter(chunk => chunk.similarity > similarityThreshold).slice(0, maxChunks);
+    const relevantChunks =
+        useMultiQuery || useReranking
+            ? chunks.slice(0, maxChunks)
+            : chunks
+                  .filter((chunk) => chunk.similarity > similarityThreshold)
+                  .slice(0, maxChunks);
 
     if (relevantChunks.length === 0) {
         return {
@@ -417,25 +484,29 @@ export async function buildAdvancedRAGContext(
             metadata: {
                 chunks: 0,
                 time: Date.now() - startTime,
-                queryType
-            }
+                queryType,
+            },
         };
     }
 
     const searchTime = Date.now() - startTime;
-    const avgSimilarity = relevantChunks.reduce((sum, c) => sum + c.similarity, 0) / relevantChunks.length;
+    const avgSimilarity =
+        relevantChunks.reduce((sum, c) => sum + c.similarity, 0) /
+        relevantChunks.length;
 
     // Format chunks with natural context (no chunk numbers or artificial instructions)
     const contextParts = relevantChunks.map((chunk) => {
-        const metadata = typeof chunk.chunkMetadata === 'string'
-            ? JSON.parse(chunk.chunkMetadata)
-            : chunk.chunkMetadata;
+        const metadata =
+            typeof chunk.chunkMetadata === 'string'
+                ? JSON.parse(chunk.chunkMetadata)
+                : chunk.chunkMetadata;
 
         const metaInfo = [];
         if (metadata.pageNumber) metaInfo.push(`page ${metadata.pageNumber}`);
         if (metadata.section) metaInfo.push(metadata.section);
 
-        const sourceInfo = metaInfo.length > 0 ? ` [${metaInfo.join(', ')}]` : '';
+        const sourceInfo =
+            metaInfo.length > 0 ? ` [${metaInfo.join(', ')}]` : '';
 
         return `${chunk.chunkContent}${sourceInfo}`;
     });
@@ -451,8 +522,8 @@ Use the above information to answer the user's question. You have access to this
             time: searchTime,
             avgSimilarity,
             queryType,
-            chunkIds: relevantChunks.map(c => c.chunkId)
-        }
+            chunkIds: relevantChunks.map((c) => c.chunkId),
+        },
     };
 }
 
@@ -461,9 +532,10 @@ Use the above information to answer the user's question. You have access to this
  * Simple implementation - in production would use more sophisticated NLP
  */
 function highlightKeywords(content: string, query: string): string {
-    const queryTerms = query.toLowerCase()
+    const queryTerms = query
+        .toLowerCase()
         .split(/\W+/)
-        .filter(term => term.length > 3)
+        .filter((term) => term.length > 3)
         .sort((a, b) => b.length - a.length); // Sort by length to match longer terms first
 
     let highlighted = content;

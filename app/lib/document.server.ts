@@ -4,6 +4,37 @@ import { randomUUID } from 'crypto';
 import pdf from 'pdf-parse';
 import pdf2md from '@opendocsg/pdf2md';
 import { buildContextualChunkText, getAdaptiveChunkSize } from './rag-advanced.server';
+import net from 'net';
+
+/**
+ * Decode HTTP chunked transfer encoding
+ */
+function decodeChunkedResponse(chunkedBody: string): string {
+    let decoded = '';
+    let position = 0;
+
+    while (position < chunkedBody.length) {
+        // Find the chunk size line (hex number followed by \r\n)
+        const chunkSizeEnd = chunkedBody.indexOf('\r\n', position);
+        if (chunkSizeEnd === -1) break;
+
+        const chunkSizeHex = chunkedBody.substring(position, chunkSizeEnd).trim();
+        const chunkSize = parseInt(chunkSizeHex, 16);
+
+        // If chunk size is 0, we're done
+        if (chunkSize === 0) break;
+
+        // Extract the chunk data
+        const chunkStart = chunkSizeEnd + 2; // Skip \r\n
+        const chunkEnd = chunkStart + chunkSize;
+        decoded += chunkedBody.substring(chunkStart, chunkEnd);
+
+        // Move position past this chunk and its trailing \r\n
+        position = chunkEnd + 2;
+    }
+
+    return decoded;
+}
 
 // Enhanced LRU cache for embeddings with statistics and adaptive TTL
 class EmbeddingCache {
@@ -156,24 +187,74 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
     // Text truncation is expected behavior for long chunks
 
-    const response = await fetch('http://localhost:11434/api/embed', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            model: config.embedModel,
-            input: truncatedText,
-        }),
+    // Use raw TCP socket to completely bypass all HTTP client compression handling
+    // This is necessary because Bun's fetch and other HTTP clients have automatic decompression
+    // that's causing zlib errors with Ollama's responses
+    const requestBody = JSON.stringify({
+        model: config.embedModel,
+        input: truncatedText,
     });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Embedding API error:', response.status, errorText);
-        throw new Error(`Failed to generate embedding: ${response.status} ${errorText}`);
-    }
+    const httpRequest = [
+        'POST /api/embed HTTP/1.1',
+        'Host: localhost:11434',
+        'Content-Type: application/json',
+        `Content-Length: ${Buffer.byteLength(requestBody)}`,
+        'Accept-Encoding: identity',
+        'Connection: close',
+        '',
+        requestBody
+    ].join('\r\n');
 
-    const data = await response.json();
+    const data = await new Promise<any>((resolve, reject) => {
+        const client = net.connect(11434, 'localhost', () => {
+            client.write(httpRequest);
+        });
+
+        let responseData = '';
+        client.on('data', (chunk) => {
+            responseData += chunk.toString();
+        });
+
+        client.on('end', () => {
+            try {
+                // Parse HTTP response - split on double CRLF
+                const headerEndIndex = responseData.indexOf('\r\n\r\n');
+                if (headerEndIndex === -1) {
+                    reject(new Error('Invalid HTTP response: no header/body separator'));
+                    return;
+                }
+
+                const headers = responseData.substring(0, headerEndIndex);
+                let body = responseData.substring(headerEndIndex + 4); // Skip the \r\n\r\n
+
+                const statusMatch = headers.match(/HTTP\/1\.\d (\d+)/);
+                const statusCode = statusMatch ? parseInt(statusMatch[1]) : 0;
+
+                if (statusCode !== 200) {
+                    reject(new Error(`Failed to generate embedding: ${statusCode} ${body.substring(0, 200)}`));
+                    return;
+                }
+
+                // Check if response uses chunked transfer encoding
+                if (headers.toLowerCase().includes('transfer-encoding: chunked')) {
+                    body = decodeChunkedResponse(body);
+                }
+
+                // Parse JSON response
+                const jsonData = JSON.parse(body);
+                resolve(jsonData);
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+                const preview = responseData.substring(0, 500);
+                reject(new Error(`Failed to parse Ollama response: ${errorMsg}\nResponse preview: ${preview}`));
+            }
+        });
+
+        client.on('error', (error) => {
+            reject(new Error(`Socket error: ${error.message}`));
+        });
+    });
 
     // Ollama API returns { embeddings: [[...]] } - note the array wrapper
     const embedding = data.embeddings?.[0] || data.embedding;
@@ -198,19 +279,52 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  */
 async function generateEmbeddingsInBatches(
     chunks: string[],
-    batchSize: number = 10
+    batchSize: number = 5 // Reduced from 10 to avoid overwhelming Ollama
 ): Promise<number[][]> {
     const results: number[][] = [];
 
     for (let i = 0; i < chunks.length; i += batchSize) {
         const batch = chunks.slice(i, i + batchSize);
-        const batchEmbeddings = await Promise.all(
-            batch.map(chunk => generateEmbedding(chunk))
-        );
+
+        // Process each embedding with retry logic
+        const batchEmbeddings: number[][] = [];
+        for (const chunk of batch) {
+            let retries = 3;
+            let embedding: number[] | null = null;
+
+            while (retries > 0 && !embedding) {
+                try {
+                    embedding = await generateEmbedding(chunk);
+                    batchEmbeddings.push(embedding);
+                    break;
+                } catch (error) {
+                    retries--;
+                    console.error(`Embedding generation attempt ${3 - retries + 1} failed:`, error);
+                    if (retries === 0) {
+                        console.error(`Failed to generate embedding after 3 attempts. Chunk preview:`, chunk.slice(0, 100));
+                        throw error;
+                    }
+                    // Wait before retry with exponential backoff
+                    console.log(`Retrying in ${(3 - retries) * 1000}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, (3 - retries) * 1000));
+                }
+            }
+        }
+
         results.push(...batchEmbeddings);
+
+        // Log progress every 50 batches
+        if ((i / batchSize + 1) % 50 === 0) {
+            console.log(`Generated embeddings for ${i + batchSize}/${chunks.length} chunks`);
+        }
+
+        // Small delay between batches to avoid overwhelming Ollama
+        if (i + batchSize < chunks.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
     }
 
-    // Embeddings generated successfully
+    console.log(`Successfully generated all ${chunks.length} embeddings`);
     return results;
 }
 
@@ -759,12 +873,16 @@ export async function processTextDocument(
         fileSize: content.length,
     };
 
+    // Don't store full markdown for very large documents to avoid packet size issues
+    // The content is preserved in chunks anyway
+    const shouldStoreMarkdown = markdownContent.length < 1000000; // 1MB limit
+
     await db.insertData('documents', {
         documentUUID,
         documentTitle: title,
         documentType,
         documentTotalChunks: chunksWithMetadata.length,
-        documentMarkdown: markdownContent,
+        documentMarkdown: shouldStoreMarkdown ? markdownContent : null,
         documentMetadata: JSON.stringify(metadata),
     });
 
@@ -797,22 +915,35 @@ export async function processTextDocument(
         const chunkUUID = randomUUID();
         const embeddingVector = JSON.stringify(embedding);
 
-        // Use VEC_FromText() function for MariaDB 11.7+ vector conversion
-        await db.rawQuery(
-            `INSERT INTO document_chunks
-            (chunkUUID, chunkDocumentId, chunkContent, chunkIndex, chunkMetadata, chunkEmbedding)
-            VALUES (?, ?, ?, ?, ?, VEC_FromText(?))`,
-            [
-                chunkUUID,
-                document.documentId,
-                chunkData.text,
-                i,
-                JSON.stringify(chunkMetadata),
-                embeddingVector,
-            ]
-        );
+        try {
+            // Use VEC_FromText() function for MariaDB 11.7+ vector conversion
+            await db.rawQuery(
+                `INSERT INTO document_chunks
+                (chunkUUID, chunkDocumentId, chunkContent, chunkIndex, chunkMetadata, chunkEmbedding)
+                VALUES (?, ?, ?, ?, ?, VEC_FromText(?))`,
+                [
+                    chunkUUID,
+                    document.documentId,
+                    chunkData.text,
+                    i,
+                    JSON.stringify(chunkMetadata),
+                    embeddingVector,
+                ]
+            );
+
+            // Log progress every 100 chunks for large documents
+            if ((i + 1) % 100 === 0) {
+                console.log(`Processed ${i + 1}/${chunksWithMetadata.length} chunks for text document`);
+            }
+        } catch (error) {
+            console.error(`Error inserting chunk ${i}:`, error);
+            // Delete the document if chunk insertion fails
+            await db.deleteData('documents', { documentId: document.documentId });
+            throw new Error(`Failed to insert chunk ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     }
 
+    console.log(`Successfully processed all ${chunksWithMetadata.length} chunks for text document: ${title}`);
     return documentUUID;
 }
 
@@ -844,12 +975,16 @@ export async function processPDFDocument(
         fileSize: pdfBuffer.length,
     };
 
+    // Don't store full markdown for very large documents to avoid packet size issues
+    // The content is preserved in chunks anyway
+    const shouldStoreMarkdown = markdownContent.length < 1000000; // 1MB limit
+
     await db.insertData('documents', {
         documentUUID,
         documentTitle: title,
         documentType: 'pdf',
         documentTotalChunks: chunksWithMetadata.length,
-        documentMarkdown: markdownContent,
+        documentMarkdown: shouldStoreMarkdown ? markdownContent : null,
         documentMetadata: JSON.stringify(metadata),
     });
 
@@ -865,8 +1000,21 @@ export async function processPDFDocument(
         buildContextualChunkText(c.text, c.metadata)
     );
 
+    console.log(`Generating embeddings for ${chunkTexts.length} chunks from PDF: ${title}`);
+
     // Generate all embeddings in parallel batches
-    const embeddings = await generateEmbeddingsInBatches(chunkTexts);
+    let embeddings: number[][];
+    try {
+        embeddings = await generateEmbeddingsInBatches(chunkTexts);
+    } catch (error) {
+        console.error('FATAL ERROR during embedding generation:', error);
+        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+        // Delete the document if embedding generation fails
+        await db.deleteData('documents', { documentId: document.documentId });
+        throw error;
+    }
+
+    console.log(`Inserting ${chunksWithMetadata.length} chunks into database...`);
 
     // Store all chunks with their embeddings
     for (let i = 0; i < chunksWithMetadata.length; i++) {
@@ -882,22 +1030,35 @@ export async function processPDFDocument(
         const chunkUUID = randomUUID();
         const embeddingVector = JSON.stringify(embedding);
 
-        // Use VEC_FromText() function for MariaDB 11.7+ vector conversion
-        await db.rawQuery(
-            `INSERT INTO document_chunks
-            (chunkUUID, chunkDocumentId, chunkContent, chunkIndex, chunkMetadata, chunkEmbedding)
-            VALUES (?, ?, ?, ?, ?, VEC_FromText(?))`,
-            [
-                chunkUUID,
-                document.documentId,
-                chunkData.text,
-                i,
-                JSON.stringify(chunkMetadata),
-                embeddingVector,
-            ]
-        );
+        try {
+            // Use VEC_FromText() function for MariaDB 11.7+ vector conversion
+            await db.rawQuery(
+                `INSERT INTO document_chunks
+                (chunkUUID, chunkDocumentId, chunkContent, chunkIndex, chunkMetadata, chunkEmbedding)
+                VALUES (?, ?, ?, ?, ?, VEC_FromText(?))`,
+                [
+                    chunkUUID,
+                    document.documentId,
+                    chunkData.text,
+                    i,
+                    JSON.stringify(chunkMetadata),
+                    embeddingVector,
+                ]
+            );
+
+            // Log progress every 100 chunks for large documents
+            if ((i + 1) % 100 === 0) {
+                console.log(`Processed ${i + 1}/${chunksWithMetadata.length} chunks for PDF`);
+            }
+        } catch (error) {
+            console.error(`Error inserting chunk ${i} for PDF "${title}":`, error);
+            // Delete the document if chunk insertion fails
+            await db.deleteData('documents', { documentId: document.documentId });
+            throw new Error(`Failed to insert chunk ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     }
 
+    console.log(`Successfully processed all ${chunksWithMetadata.length} chunks for PDF: ${title}`);
     return documentUUID;
 }
 

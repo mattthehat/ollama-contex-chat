@@ -7,6 +7,7 @@ export default [
     route('chats/:chatId', 'routes/chats/detail.tsx'),
     route('library', 'routes/library/index.tsx'),
     route('library/new', 'routes/library/new.tsx'),
+    route('library/delete', 'routes/library/delete.tsx'),
     route('library/:uuid', 'routes/library/view.tsx'),
     route('models', 'routes/models/index.tsx'),
     route('models/new', 'routes/models/new.tsx'),
