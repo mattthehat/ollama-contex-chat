@@ -100,6 +100,18 @@ CREATE TABLE `custom_models` (
   `ragUseHybridSearch` BOOLEAN DEFAULT TRUE,
   `ragUseReranking` BOOLEAN DEFAULT TRUE,
 
+  -- Intelligent RAG Features
+  `ragUseHyDE` BOOLEAN DEFAULT TRUE COMMENT 'Generate hypothetical answers for better retrieval',
+  `ragUseQueryDecomposition` BOOLEAN DEFAULT TRUE COMMENT 'Break complex queries into sub-questions',
+  `ragUseContextCompression` BOOLEAN DEFAULT TRUE COMMENT 'Remove irrelevant sentences from context',
+  `ragUseEntityTracking` BOOLEAN DEFAULT TRUE COMMENT 'Track topics and concepts across conversation',
+  `ragEnableCitations` BOOLEAN DEFAULT TRUE COMMENT 'Add [1], [2] citations to responses',
+  `ragEnableConfidenceScoring` BOOLEAN DEFAULT TRUE COMMENT 'Calculate confidence level for answers',
+  `ragEnableResponseEnhancement` BOOLEAN DEFAULT TRUE COMMENT 'Add summaries, disclaimers, follow-ups',
+  `ragAddExecutiveSummary` BOOLEAN DEFAULT FALSE COMMENT 'Add summary for long responses',
+  `ragAddFollowUpSuggestions` BOOLEAN DEFAULT TRUE COMMENT 'Suggest follow-up questions',
+  `ragAddSmartDisclaimers` BOOLEAN DEFAULT TRUE COMMENT 'Add context-aware disclaimers',
+
   -- System Prompt
   `systemPrompt` TEXT NOT NULL DEFAULT 'You are a helpful AI assistant.',
 

@@ -133,20 +133,61 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         // Use model's ragMaxChunks setting or calculate dynamically
         const dynamicChunkLimit = Math.max(3, Math.min(customModel.ragMaxChunks, Math.floor(availableTokens / 500)));
 
-        // Build RAG context using model's configuration
-        const rawRAGContext = selectedDocs.length > 0
-            ? await buildRAGContext(
+        // Check if model has intelligent RAG enabled
+        const useIntelligentRAG = customModel.ragUseHyDE ||
+                                 customModel.ragEnableCitations ||
+                                 customModel.ragEnableConfidenceScoring;
+
+        let ragContext = '';
+        let citations = '';
+        let confidence: 'high' | 'medium' | 'low' = 'medium';
+        let intelligentMetadata: any = null;
+
+        if (selectedDocs.length > 0 && useIntelligentRAG) {
+            // Use intelligent RAG system
+            const { generateIntelligentResponse } = await import('~/lib/intelligent-chat.server');
+
+            // Conversation history is already in the correct format (Message[])
+            const formattedHistory = conversationHistory;
+
+            try {
+                const result = await generateIntelligentResponse({
+                    message,
+                    documentUUIDs: selectedDocs,
+                    conversationHistory: formattedHistory,
+                    userRole: undefined,
+                    useAdvancedRAG: customModel.ragUseHyDE
+                });
+
+                ragContext = result.answer;
+                citations = result.citations || '';
+                confidence = result.confidence;
+                intelligentMetadata = result.metadata;
+            } catch (error) {
+                console.error('Intelligent RAG failed, falling back to basic RAG:', error);
+                // Fall back to basic RAG on error
+                const rawRAGContext = await buildRAGContext(
+                    message,
+                    selectedDocs,
+                    conversationHistory,
+                    dynamicChunkLimit,
+                    customModel.ragSimilarityThreshold,
+                    customModel.useAdvancedRAG
+                );
+                ragContext = sanitizeRAGContext(rawRAGContext);
+            }
+        } else if (selectedDocs.length > 0) {
+            // Use basic RAG
+            const rawRAGContext = await buildRAGContext(
                 message,
                 selectedDocs,
                 conversationHistory,
                 dynamicChunkLimit,
                 customModel.ragSimilarityThreshold,
                 customModel.useAdvancedRAG
-            )
-            : '';
-
-        // Sanitize RAG context to prevent prompt injection from documents
-        const ragContext = sanitizeRAGContext(rawRAGContext);
+            );
+            ragContext = sanitizeRAGContext(rawRAGContext);
+        }
 
         // Protect system prompt against injection attempts
         const protectedSystemPrompt = protectSystemPrompt(customModel.systemPrompt);
@@ -156,6 +197,16 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
             model: customModel.ollamaModel,
             selectedDocs,
             ragContext,
+            citations,
+            confidence,
+            intelligentMetadata,
+            intelligentRAGConfig: {
+                enabled: useIntelligentRAG,
+                enableCitations: customModel.ragEnableCitations,
+                enableConfidenceScoring: customModel.ragEnableConfidenceScoring,
+                addFollowUpSuggestions: customModel.ragAddFollowUpSuggestions,
+                addSmartDisclaimers: customModel.ragAddSmartDisclaimers
+            },
             systemPrompt: protectedSystemPrompt,
             modelConfig: {
                 temperature: parseFloat(customModel.ollamaTemperature as any),
@@ -303,6 +354,14 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
                             ? 'message-error'
                             : undefined
                     }
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            if (!isBusy && textareaRef.current?.value.trim()) {
+                                fetcher.submit(e.currentTarget.form);
+                            }
+                        }
+                    }}
                 />
                 {actionData?.errors?.message && (
                     <div id="message-error" className="text-red-500">

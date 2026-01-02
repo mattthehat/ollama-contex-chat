@@ -65,12 +65,16 @@ The application runs entirely locally with no external API dependencies, ensurin
 ## Features
 
 - **Advanced RAG Implementation** - Semantic chunking with heading hierarchy preservation
+- **Intelligent RAG System** - HyDE, query decomposition, context compression, and entity tracking
+- **Professional Citations** - Inline source citations with page numbers and confidence scoring
+- **Custom Model CMS** - Create and manage AI models with fine-tuned configurations
 - **Document Library** - Upload PDFs, text files, markdown, and code
-- **Intelligent Chat** - Context-aware conversations with source citations
+- **Context-Aware Chat** - Conversations grounded in your documents with smart disclaimers
 - **Vector Search** - MariaDB 11.7+ native vector similarity search
 - **Performance Optimised** - Parallel embedding generation and LRU caching
 - **Dynamic Context** - Adaptive token management based on conversation length
 - **Real-time Streaming** - Live response streaming from Ollama
+- **Response Enhancement** - Professional formatting, summaries, and follow-up suggestions
 - **100% Local** - No external APIs, full privacy control
 - **Modern UI** - Built with React Router and TailwindCSS
 - **TypeScript** - Full type safety throughout the stack

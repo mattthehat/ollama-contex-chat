@@ -1,4 +1,5 @@
 const config = {
+    // Ollama Configuration
     ollamaEndpoint: 'http://localhost:11434/api/chat',
     maxContext: 16384,
     chatModels: [
@@ -20,6 +21,52 @@ const config = {
         },
     ],
     embedModel: 'nomic-embed-text:latest',
+
+    // Security Settings
+    security: {
+        maxUploadSize: 50 * 1024 * 1024, // 50MB
+        maxDocumentsPerUser: 1000,
+        maxChunksPerDocument: 10000,
+        enablePIIDetection: true,
+        enablePromptInjectionProtection: true,
+        allowedFileTypes: ['.pdf', '.txt', '.md', '.markdown'],
+        maxFilenameLength: 255,
+    },
+
+    // Rate Limiting
+    rateLimit: {
+        upload: {
+            maxRequests: 10, // per hour
+            windowMs: 60 * 60 * 1000,
+            blockDuration: 15 * 60 * 1000,
+        },
+        query: {
+            maxRequests: 60, // per minute
+            windowMs: 60 * 1000,
+        },
+        embedding: {
+            maxRequests: 100, // per minute
+            windowMs: 60 * 1000,
+        },
+    },
+
+    // Performance Settings
+    performance: {
+        embeddingBatchSize: 5,
+        maxConcurrentEmbeddings: 3,
+        cacheTTL: 3600, // 1 hour in seconds
+        enableCircuitBreaker: true,
+    },
+
+    // RAG Quality Settings
+    rag: {
+        minSimilarityThreshold: 0.3,
+        maxContextChunks: 5,
+        enableReranking: true,
+        enableHybridSearch: true,
+        enableCitations: true,
+        enableConfidenceScoring: true,
+    },
 } as const;
 
 export default config;

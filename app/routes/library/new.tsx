@@ -2,6 +2,10 @@ import { useFetcher, redirect } from 'react-router';
 import type { Route } from './+types/new';
 import Loader from '~/components/Loader';
 import { processTextDocument, processPDFDocument } from '~/lib/document.server';
+import { validateFileUpload, validateDocumentTitle, validateFileBuffer } from '~/lib/validation';
+import { checkRateLimit, getRequestIdentifier } from '~/lib/rate-limiter';
+import { analyzePIIRisk, redactPII } from '~/lib/pii-detection';
+import config from '~/lib/config';
 
 export function meta({}: Route.MetaArgs) {
     return [
@@ -26,15 +30,59 @@ export async function action({ request }: Route.ActionArgs) {
         };
     }
 
+    // 1. Check rate limit
+    const identifier = getRequestIdentifier(request);
+    const rateLimit = checkRateLimit(identifier, 'upload');
+
+    if (!rateLimit.allowed) {
+        return {
+            error: `Upload limit exceeded. Please try again in ${rateLimit.retryAfter} seconds.`,
+        };
+    }
+
+    // 2. Validate document title
+    const titleValidation = validateDocumentTitle(title);
+    if (!titleValidation.valid) {
+        return { error: titleValidation.error };
+    }
+
+    // 3. Validate file upload
+    const fileValidation = validateFileUpload(file, config.security.maxUploadSize);
+    if (!fileValidation.valid) {
+        return { error: fileValidation.error };
+    }
+
     try {
+        // 4. Read file content
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // 5. Validate file buffer (magic number check)
+        const bufferValidation = validateFileBuffer(
+            buffer,
+            type === 'pdf' ? 'pdf' : 'text'
+        );
+        if (!bufferValidation.valid) {
+            return { error: bufferValidation.error };
+        }
+
+        // 6. PII Detection for text files (optional warning)
+        let piiWarning: string | undefined;
+        if (config.security.enablePIIDetection && type !== 'pdf') {
+            const fileContent = buffer.toString('utf8');
+            const piiAnalysis = analyzePIIRisk(fileContent);
+
+            if (piiAnalysis.riskLevel === 'high') {
+                piiWarning = `Warning: Document contains ${piiAnalysis.piiCount} potential PII items (${piiAnalysis.types.join(', ')}). Consider reviewing before uploading.`;
+                console.warn(`[PII Detection] ${piiWarning}`);
+            }
+        }
+
+        // 7. Process document
         if (type === 'pdf') {
-            // Handle PDF files
-            const arrayBuffer = await file.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
             await processPDFDocument(title, buffer);
         } else {
-            // Handle text-based files (text, markdown, code, documentation)
-            const fileContent = await file.text();
+            const fileContent = buffer.toString('utf8');
             await processTextDocument(
                 title,
                 fileContent,

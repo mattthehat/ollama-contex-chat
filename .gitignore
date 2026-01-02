@@ -26,3 +26,6 @@
 # Database
 *.db
 *.sqlite
+
+# Personal documentation and examples
+ENHANCED_SAFEGUARDING_PROMPT.md

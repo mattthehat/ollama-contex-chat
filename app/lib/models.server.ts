@@ -24,6 +24,18 @@ export type CustomModel = {
     ragUseHybridSearch: boolean;
     ragUseReranking: boolean;
 
+    // Intelligent RAG Features
+    ragUseHyDE: boolean;
+    ragUseQueryDecomposition: boolean;
+    ragUseContextCompression: boolean;
+    ragUseEntityTracking: boolean;
+    ragEnableCitations: boolean;
+    ragEnableConfidenceScoring: boolean;
+    ragEnableResponseEnhancement: boolean;
+    ragAddExecutiveSummary: boolean;
+    ragAddFollowUpSuggestions: boolean;
+    ragAddSmartDisclaimers: boolean;
+
     // System Prompt
     systemPrompt: string;
 
@@ -63,10 +75,58 @@ export type CreateCustomModelData = {
     ragUseMultiQuery?: boolean;
     ragUseHybridSearch?: boolean;
     ragUseReranking?: boolean;
+    ragUseHyDE?: boolean;
+    ragUseQueryDecomposition?: boolean;
+    ragUseContextCompression?: boolean;
+    ragUseEntityTracking?: boolean;
+    ragEnableCitations?: boolean;
+    ragEnableConfidenceScoring?: boolean;
+    ragEnableResponseEnhancement?: boolean;
+    ragAddExecutiveSummary?: boolean;
+    ragAddFollowUpSuggestions?: boolean;
+    ragAddSmartDisclaimers?: boolean;
     systemPrompt: string;
     maxContextTokens?: number;
     maxOutputTokens?: number;
     documentIds?: number[];
+};
+
+// Standard field mapping for all queries
+const MODEL_FIELDS = {
+    modelId: 'modelId',
+    modelUUID: 'modelUUID',
+    modelName: 'modelName',
+    modelDescription: 'modelDescription',
+    modelIcon: 'modelIcon',
+    ollamaModel: 'ollamaModel',
+    ollamaTemperature: 'ollamaTemperature',
+    ollamaTopP: 'ollamaTopP',
+    ollamaTopK: 'ollamaTopK',
+    ollamaRepeatPenalty: 'ollamaRepeatPenalty',
+    ollamaSeed: 'ollamaSeed',
+    useAdvancedRAG: 'useAdvancedRAG',
+    ragMaxChunks: 'ragMaxChunks',
+    ragSimilarityThreshold: 'ragSimilarityThreshold',
+    ragUseMultiQuery: 'ragUseMultiQuery',
+    ragUseHybridSearch: 'ragUseHybridSearch',
+    ragUseReranking: 'ragUseReranking',
+    ragUseHyDE: 'ragUseHyDE',
+    ragUseQueryDecomposition: 'ragUseQueryDecomposition',
+    ragUseContextCompression: 'ragUseContextCompression',
+    ragUseEntityTracking: 'ragUseEntityTracking',
+    ragEnableCitations: 'ragEnableCitations',
+    ragEnableConfidenceScoring: 'ragEnableConfidenceScoring',
+    ragEnableResponseEnhancement: 'ragEnableResponseEnhancement',
+    ragAddExecutiveSummary: 'ragAddExecutiveSummary',
+    ragAddFollowUpSuggestions: 'ragAddFollowUpSuggestions',
+    ragAddSmartDisclaimers: 'ragAddSmartDisclaimers',
+    systemPrompt: 'systemPrompt',
+    maxContextTokens: 'maxContextTokens',
+    maxOutputTokens: 'maxOutputTokens',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
+    isActive: 'isActive',
+    isDefault: 'isDefault',
 };
 
 /**
@@ -77,32 +137,7 @@ export async function getAllCustomModels(): Promise<CustomModel[]> {
         {
             table: 'custom_models',
             idField: 'modelId',
-            fields: {
-                modelId: 'modelId',
-                modelUUID: 'modelUUID',
-                modelName: 'modelName',
-                modelDescription: 'modelDescription',
-                modelIcon: 'modelIcon',
-                ollamaModel: 'ollamaModel',
-                ollamaTemperature: 'ollamaTemperature',
-                ollamaTopP: 'ollamaTopP',
-                ollamaTopK: 'ollamaTopK',
-                ollamaRepeatPenalty: 'ollamaRepeatPenalty',
-                ollamaSeed: 'ollamaSeed',
-                useAdvancedRAG: 'useAdvancedRAG',
-                ragMaxChunks: 'ragMaxChunks',
-                ragSimilarityThreshold: 'ragSimilarityThreshold',
-                ragUseMultiQuery: 'ragUseMultiQuery',
-                ragUseHybridSearch: 'ragUseHybridSearch',
-                ragUseReranking: 'ragUseReranking',
-                systemPrompt: 'systemPrompt',
-                maxContextTokens: 'maxContextTokens',
-                maxOutputTokens: 'maxOutputTokens',
-                createdAt: 'createdAt',
-                updatedAt: 'updatedAt',
-                isActive: 'isActive',
-                isDefault: 'isDefault',
-            },
+            fields: MODEL_FIELDS,
             where: ['isActive = ?'],
             orderBy: ['modelName'],
             orderDirection: 'ASC',
@@ -129,32 +164,7 @@ export async function getCustomModelByUUID(
             table: 'custom_models',
             idField: 'modelId',
             where: ['modelUUID = ?'],
-            fields: {
-                modelId: 'modelId',
-                modelUUID: 'modelUUID',
-                modelName: 'modelName',
-                modelDescription: 'modelDescription',
-                modelIcon: 'modelIcon',
-                ollamaModel: 'ollamaModel',
-                ollamaTemperature: 'ollamaTemperature',
-                ollamaTopP: 'ollamaTopP',
-                ollamaTopK: 'ollamaTopK',
-                ollamaRepeatPenalty: 'ollamaRepeatPenalty',
-                ollamaSeed: 'ollamaSeed',
-                useAdvancedRAG: 'useAdvancedRAG',
-                ragMaxChunks: 'ragMaxChunks',
-                ragSimilarityThreshold: 'ragSimilarityThreshold',
-                ragUseMultiQuery: 'ragUseMultiQuery',
-                ragUseHybridSearch: 'ragUseHybridSearch',
-                ragUseReranking: 'ragUseReranking',
-                systemPrompt: 'systemPrompt',
-                maxContextTokens: 'maxContextTokens',
-                maxOutputTokens: 'maxOutputTokens',
-                createdAt: 'createdAt',
-                updatedAt: 'updatedAt',
-                isActive: 'isActive',
-                isDefault: 'isDefault',
-            },
+            fields: MODEL_FIELDS,
         },
         [uuid]
     );
@@ -173,32 +183,7 @@ export async function getCustomModelById(
             table: 'custom_models',
             idField: 'modelId',
             where: ['modelId = ?'],
-            fields: {
-                modelId: 'modelId',
-                modelUUID: 'modelUUID',
-                modelName: 'modelName',
-                modelDescription: 'modelDescription',
-                modelIcon: 'modelIcon',
-                ollamaModel: 'ollamaModel',
-                ollamaTemperature: 'ollamaTemperature',
-                ollamaTopP: 'ollamaTopP',
-                ollamaTopK: 'ollamaTopK',
-                ollamaRepeatPenalty: 'ollamaRepeatPenalty',
-                ollamaSeed: 'ollamaSeed',
-                useAdvancedRAG: 'useAdvancedRAG',
-                ragMaxChunks: 'ragMaxChunks',
-                ragSimilarityThreshold: 'ragSimilarityThreshold',
-                ragUseMultiQuery: 'ragUseMultiQuery',
-                ragUseHybridSearch: 'ragUseHybridSearch',
-                ragUseReranking: 'ragUseReranking',
-                systemPrompt: 'systemPrompt',
-                maxContextTokens: 'maxContextTokens',
-                maxOutputTokens: 'maxOutputTokens',
-                createdAt: 'createdAt',
-                updatedAt: 'updatedAt',
-                isActive: 'isActive',
-                isDefault: 'isDefault',
-            },
+            fields: MODEL_FIELDS,
         },
         [id]
     );
@@ -264,6 +249,16 @@ export async function createCustomModel(
         ragUseMultiQuery: data.ragUseMultiQuery ?? true,
         ragUseHybridSearch: data.ragUseHybridSearch ?? true,
         ragUseReranking: data.ragUseReranking ?? true,
+        ragUseHyDE: data.ragUseHyDE ?? true,
+        ragUseQueryDecomposition: data.ragUseQueryDecomposition ?? true,
+        ragUseContextCompression: data.ragUseContextCompression ?? true,
+        ragUseEntityTracking: data.ragUseEntityTracking ?? true,
+        ragEnableCitations: data.ragEnableCitations ?? true,
+        ragEnableConfidenceScoring: data.ragEnableConfidenceScoring ?? true,
+        ragEnableResponseEnhancement: data.ragEnableResponseEnhancement ?? true,
+        ragAddExecutiveSummary: data.ragAddExecutiveSummary ?? false,
+        ragAddFollowUpSuggestions: data.ragAddFollowUpSuggestions ?? true,
+        ragAddSmartDisclaimers: data.ragAddSmartDisclaimers ?? true,
         systemPrompt: data.systemPrompt,
         maxContextTokens: data.maxContextTokens ?? 16384,
         maxOutputTokens: data.maxOutputTokens ?? 4096,
@@ -322,6 +317,26 @@ export async function updateCustomModel(
         updateData.ragUseHybridSearch = data.ragUseHybridSearch;
     if (data.ragUseReranking !== undefined)
         updateData.ragUseReranking = data.ragUseReranking;
+    if (data.ragUseHyDE !== undefined)
+        updateData.ragUseHyDE = data.ragUseHyDE;
+    if (data.ragUseQueryDecomposition !== undefined)
+        updateData.ragUseQueryDecomposition = data.ragUseQueryDecomposition;
+    if (data.ragUseContextCompression !== undefined)
+        updateData.ragUseContextCompression = data.ragUseContextCompression;
+    if (data.ragUseEntityTracking !== undefined)
+        updateData.ragUseEntityTracking = data.ragUseEntityTracking;
+    if (data.ragEnableCitations !== undefined)
+        updateData.ragEnableCitations = data.ragEnableCitations;
+    if (data.ragEnableConfidenceScoring !== undefined)
+        updateData.ragEnableConfidenceScoring = data.ragEnableConfidenceScoring;
+    if (data.ragEnableResponseEnhancement !== undefined)
+        updateData.ragEnableResponseEnhancement = data.ragEnableResponseEnhancement;
+    if (data.ragAddExecutiveSummary !== undefined)
+        updateData.ragAddExecutiveSummary = data.ragAddExecutiveSummary;
+    if (data.ragAddFollowUpSuggestions !== undefined)
+        updateData.ragAddFollowUpSuggestions = data.ragAddFollowUpSuggestions;
+    if (data.ragAddSmartDisclaimers !== undefined)
+        updateData.ragAddSmartDisclaimers = data.ragAddSmartDisclaimers;
     if (data.systemPrompt !== undefined)
         updateData.systemPrompt = data.systemPrompt;
     if (data.maxContextTokens !== undefined)
@@ -411,32 +426,7 @@ export async function getDefaultModel(): Promise<CustomModel | null> {
             table: 'custom_models',
             idField: 'modelId',
             where: ['isDefault = ? AND isActive = ?'],
-            fields: {
-                modelId: 'modelId',
-                modelUUID: 'modelUUID',
-                modelName: 'modelName',
-                modelDescription: 'modelDescription',
-                modelIcon: 'modelIcon',
-                ollamaModel: 'ollamaModel',
-                ollamaTemperature: 'ollamaTemperature',
-                ollamaTopP: 'ollamaTopP',
-                ollamaTopK: 'ollamaTopK',
-                ollamaRepeatPenalty: 'ollamaRepeatPenalty',
-                ollamaSeed: 'ollamaSeed',
-                useAdvancedRAG: 'useAdvancedRAG',
-                ragMaxChunks: 'ragMaxChunks',
-                ragSimilarityThreshold: 'ragSimilarityThreshold',
-                ragUseMultiQuery: 'ragUseMultiQuery',
-                ragUseHybridSearch: 'ragUseHybridSearch',
-                ragUseReranking: 'ragUseReranking',
-                systemPrompt: 'systemPrompt',
-                maxContextTokens: 'maxContextTokens',
-                maxOutputTokens: 'maxOutputTokens',
-                createdAt: 'createdAt',
-                updatedAt: 'updatedAt',
-                isActive: 'isActive',
-                isDefault: 'isDefault',
-            },
+            fields: MODEL_FIELDS,
         },
         [true, true]
     );

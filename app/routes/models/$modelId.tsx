@@ -81,6 +81,18 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     const ragUseHybridSearch = formData.get('ragUseHybridSearch') === 'on';
     const ragUseReranking = formData.get('ragUseReranking') === 'on';
 
+    // Intelligent RAG features
+    const ragUseHyDE = formData.get('ragUseHyDE') === 'on';
+    const ragUseQueryDecomposition = formData.get('ragUseQueryDecomposition') === 'on';
+    const ragUseContextCompression = formData.get('ragUseContextCompression') === 'on';
+    const ragUseEntityTracking = formData.get('ragUseEntityTracking') === 'on';
+    const ragEnableCitations = formData.get('ragEnableCitations') === 'on';
+    const ragEnableConfidenceScoring = formData.get('ragEnableConfidenceScoring') === 'on';
+    const ragEnableResponseEnhancement = formData.get('ragEnableResponseEnhancement') === 'on';
+    const ragAddExecutiveSummary = formData.get('ragAddExecutiveSummary') === 'on';
+    const ragAddFollowUpSuggestions = formData.get('ragAddFollowUpSuggestions') === 'on';
+    const ragAddSmartDisclaimers = formData.get('ragAddSmartDisclaimers') === 'on';
+
     const documentIds = formData
         .getAll('documents')
         .map((id) => parseInt(id as string));
@@ -117,6 +129,16 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
             ragUseMultiQuery,
             ragUseHybridSearch,
             ragUseReranking,
+            ragUseHyDE,
+            ragUseQueryDecomposition,
+            ragUseContextCompression,
+            ragUseEntityTracking,
+            ragEnableCitations,
+            ragEnableConfidenceScoring,
+            ragEnableResponseEnhancement,
+            ragAddExecutiveSummary,
+            ragAddFollowUpSuggestions,
+            ragAddSmartDisclaimers,
             systemPrompt,
             maxContextTokens,
             maxOutputTokens,
@@ -325,74 +347,80 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                             </label>
                         </div>
 
-                        <div className="pl-7 space-y-3 border-l-2 border-gray-200">
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="ragUseMultiQuery"
-                                    name="ragUseMultiQuery"
-                                    defaultChecked={model.ragUseMultiQuery}
-                                    className="w-4 h-4"
-                                />
-                                <label
-                                    htmlFor="ragUseMultiQuery"
-                                    className="text-sm dark:text-gray-300"
-                                >
-                                    Multi-Query Retrieval
-                                </label>
+                        <div className="pl-7 space-y-3 border-l-2 border-gray-200 dark:border-gray-700">
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="ragUseMultiQuery"
+                                        name="ragUseMultiQuery"
+                                        className="w-4 h-4"
+                                        defaultChecked={model.ragUseMultiQuery}
+                                    />
+                                    <label htmlFor="ragUseMultiQuery" className="text-sm dark:text-gray-300">
+                                        Multi-Query Retrieval
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Generates multiple search variations to find more relevant context</p>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="ragUseHybridSearch"
-                                    name="ragUseHybridSearch"
-                                    defaultChecked={model.ragUseHybridSearch}
-                                    className="w-4 h-4"
-                                />
-                                <label
-                                    htmlFor="ragUseHybridSearch"
-                                    className="text-sm dark:text-gray-300"
-                                >
-                                    Hybrid Search
-                                </label>
+
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="ragUseHybridSearch"
+                                        name="ragUseHybridSearch"
+                                        className="w-4 h-4"
+                                        defaultChecked={model.ragUseHybridSearch}
+                                    />
+                                    <label htmlFor="ragUseHybridSearch" className="text-sm dark:text-gray-300">
+                                        Hybrid Search
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Combines semantic (vector) and keyword (BM25) search for better results</p>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="ragUseReranking"
-                                    name="ragUseReranking"
-                                    defaultChecked={model.ragUseReranking}
-                                    className="w-4 h-4"
-                                />
-                                <label
-                                    htmlFor="ragUseReranking"
-                                    className="text-sm dark:text-gray-300"
-                                >
-                                    Re-ranking
-                                </label>
+
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="ragUseReranking"
+                                        name="ragUseReranking"
+                                        className="w-4 h-4"
+                                        defaultChecked={model.ragUseReranking}
+                                    />
+                                    <label htmlFor="ragUseReranking" className="text-sm dark:text-gray-300">
+                                        Re-ranking
+                                    </label>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Reorders search results by relevance for higher quality context</p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label htmlFor="ragMaxChunks" className="block text-sm font-medium mb-1 dark:text-gray-200">
                                     Max Chunks
                                 </label>
                                 <input
                                     type="number"
+                                    id="ragMaxChunks"
                                     name="ragMaxChunks"
                                     min="1"
                                     max="20"
                                     defaultValue={model.ragMaxChunks}
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum number of document chunks to include in context (higher = more info, slower)</p>
                             </div>
+
                             <div>
-                                <label className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label htmlFor="ragSimilarityThreshold" className="block text-sm font-medium mb-1 dark:text-gray-200">
                                     Similarity Threshold
                                 </label>
                                 <input
                                     type="number"
+                                    id="ragSimilarityThreshold"
                                     name="ragSimilarityThreshold"
                                     step="0.01"
                                     min="0"
@@ -400,6 +428,198 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                     defaultValue={model.ragSimilarityThreshold}
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum similarity score to include a chunk (0.1 = very lenient, 0.7 = strict)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Intelligent RAG Features */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Intelligent RAG Features</h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        Professional-grade features for better retrieval, citations, and response quality
+                    </p>
+
+                    <div className="space-y-4">
+                        {/* Core Intelligent Features */}
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold dark:text-white">Core Intelligence</h3>
+
+                            <div className="pl-4 space-y-3 border-l-2 border-blue-200 dark:border-blue-700">
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragUseHyDE"
+                                            name="ragUseHyDE"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragUseHyDE}
+                                        />
+                                        <label htmlFor="ragUseHyDE" className="text-sm font-medium dark:text-gray-300">
+                                            HyDE (Hypothetical Document Embeddings)
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Generates hypothetical answers for 30-50% better retrieval accuracy</p>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragUseQueryDecomposition"
+                                            name="ragUseQueryDecomposition"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragUseQueryDecomposition}
+                                        />
+                                        <label htmlFor="ragUseQueryDecomposition" className="text-sm font-medium dark:text-gray-300">
+                                            Query Decomposition
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Breaks complex questions into sub-queries for comprehensive answers</p>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragUseContextCompression"
+                                            name="ragUseContextCompression"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragUseContextCompression}
+                                        />
+                                        <label htmlFor="ragUseContextCompression" className="text-sm font-medium dark:text-gray-300">
+                                            Contextual Compression
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Removes irrelevant sentences, fits 2-3x more relevant content in context</p>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragUseEntityTracking"
+                                            name="ragUseEntityTracking"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragUseEntityTracking}
+                                        />
+                                        <label htmlFor="ragUseEntityTracking" className="text-sm font-medium dark:text-gray-300">
+                                            Entity Tracking
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Tracks topics and concepts across conversation for better context</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Quality Features */}
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold dark:text-white">Quality & Accuracy</h3>
+
+                            <div className="pl-4 space-y-3 border-l-2 border-green-200 dark:border-green-700">
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragEnableCitations"
+                                            name="ragEnableCitations"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragEnableCitations}
+                                        />
+                                        <label htmlFor="ragEnableCitations" className="text-sm font-medium dark:text-gray-300">
+                                            Citations [1], [2]
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Add inline citations with page numbers to responses</p>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragEnableConfidenceScoring"
+                                            name="ragEnableConfidenceScoring"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragEnableConfidenceScoring}
+                                        />
+                                        <label htmlFor="ragEnableConfidenceScoring" className="text-sm font-medium dark:text-gray-300">
+                                            Confidence Scoring
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Calculates high/medium/low confidence for answer quality</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Response Enhancement */}
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold dark:text-white">Response Enhancement</h3>
+
+                            <div className="pl-4 space-y-3 border-l-2 border-purple-200 dark:border-purple-700">
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragEnableResponseEnhancement"
+                                            name="ragEnableResponseEnhancement"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragEnableResponseEnhancement}
+                                        />
+                                        <label htmlFor="ragEnableResponseEnhancement" className="text-sm font-medium dark:text-gray-300">
+                                            Professional Formatting
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Enhances responses with proper structure, code blocks, and formatting</p>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragAddExecutiveSummary"
+                                            name="ragAddExecutiveSummary"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragAddExecutiveSummary}
+                                        />
+                                        <label htmlFor="ragAddExecutiveSummary" className="text-sm font-medium dark:text-gray-300">
+                                            Executive Summaries
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Add brief summaries for long responses (300+ words)</p>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragAddFollowUpSuggestions"
+                                            name="ragAddFollowUpSuggestions"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragAddFollowUpSuggestions}
+                                        />
+                                        <label htmlFor="ragAddFollowUpSuggestions" className="text-sm font-medium dark:text-gray-300">
+                                            Follow-up Suggestions
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Suggest relevant follow-up questions based on context</p>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="ragAddSmartDisclaimers"
+                                            name="ragAddSmartDisclaimers"
+                                            className="w-4 h-4"
+                                            defaultChecked={model.ragAddSmartDisclaimers}
+                                        />
+                                        <label htmlFor="ragAddSmartDisclaimers" className="text-sm font-medium dark:text-gray-300">
+                                            Smart Disclaimers
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Auto-add appropriate disclaimers (legal, medical, financial, security)</p>
+                                </div>
                             </div>
                         </div>
                     </div>
