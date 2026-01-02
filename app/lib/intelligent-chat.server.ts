@@ -21,6 +21,7 @@ export interface IntelligentChatRequest {
     conversationHistory: Array<{ role: string; content: string }>;
     userRole?: string;
     useAdvancedRAG?: boolean;
+    customSystemPrompt?: string;
 }
 
 export interface IntelligentChatResponse {
@@ -44,7 +45,7 @@ export async function generateIntelligentResponse(
     request: IntelligentChatRequest
 ): Promise<IntelligentChatResponse> {
     const startTime = Date.now();
-    const { message, documentUUIDs, conversationHistory, userRole, useAdvancedRAG } = request;
+    const { message, documentUUIDs, conversationHistory, userRole, useAdvancedRAG, customSystemPrompt } = request;
 
     // 1. Security: Check for prompt injection
     const injectionWarning = detectPromptInjection(message);
@@ -120,11 +121,9 @@ export async function generateIntelligentResponse(
         : ragResult.context;
 
     // 6. Build professional system prompt
-    const systemPrompt = buildProfessionalSystemPrompt(
-        sanitizedContext,
-        conversationSummary,
-        userRole
-    );
+    const systemPrompt = customSystemPrompt
+        ? `${customSystemPrompt}\n\n${conversationSummary ? `Conversation context: ${conversationSummary}\n\n` : ''}${sanitizedContext}`
+        : buildProfessionalSystemPrompt(sanitizedContext, conversationSummary, userRole);
 
     // 7. Generate response with circuit breaker
     const breaker = getCircuitBreaker('ollama-chat', {
@@ -235,7 +234,7 @@ export async function* streamIntelligentResponse(
     request: IntelligentChatRequest
 ): AsyncGenerator<string, void, unknown> {
     const startTime = Date.now();
-    const { message, documentUUIDs, conversationHistory, userRole, useAdvancedRAG } = request;
+    const { message, documentUUIDs, conversationHistory, userRole, useAdvancedRAG, customSystemPrompt } = request;
 
     // Security check
     const injectionWarning = detectPromptInjection(message);
@@ -283,11 +282,9 @@ export async function* streamIntelligentResponse(
         ? sanitizeRAGContext(ragResult.context)
         : ragResult.context;
 
-    const systemPrompt = buildProfessionalSystemPrompt(
-        sanitizedContext,
-        conversationSummary,
-        userRole
-    );
+    const systemPrompt = customSystemPrompt
+        ? `${customSystemPrompt}\n\n${conversationSummary ? `Conversation context: ${conversationSummary}\n\n` : ''}${sanitizedContext}`
+        : buildProfessionalSystemPrompt(sanitizedContext, conversationSummary, userRole);
 
     // Stream response
     const messages = [

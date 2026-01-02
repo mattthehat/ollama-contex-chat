@@ -156,7 +156,8 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                     documentUUIDs: selectedDocs,
                     conversationHistory: formattedHistory,
                     userRole: undefined,
-                    useAdvancedRAG: customModel.ragUseHyDE
+                    useAdvancedRAG: customModel.ragUseHyDE,
+                    customSystemPrompt: customModel.systemPrompt
                 });
 
                 ragContext = result.answer;
