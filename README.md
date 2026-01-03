@@ -155,24 +155,30 @@ This approach reduces hallucinations, provides source attribution, and allows LL
 
 Our RAG implementation consists of three main pipelines:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    DOCUMENT INGESTION                       │
-│  PDF/Text Upload → Convert to Markdown → Semantic Chunks  │
-│       → Generate Embeddings (Parallel) → Store in DB       │
-└─────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    RETRIEVAL & CONTEXT                      │
-│  User Message → Build Weighted Query → Vector Search      │
-│  → Filter by Similarity → Format with Metadata            │
-└─────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    CHAT GENERATION                          │
-│  System Prompt + RAG Context + History → Send to Ollama   │
-│       → Stream Response → Save to Chat History             │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    A[DOCUMENT INGESTION] --> A1[PDF/Text Upload]
+    A1 --> A2[Convert to Markdown]
+    A2 --> A3[Semantic Chunks]
+    A3 --> A4[Generate Embeddings<br/>Parallel Processing]
+    A4 --> A5[Store in Database]
+
+    A5 --> B[RETRIEVAL & CONTEXT]
+    B --> B1[User Message]
+    B1 --> B2[Build Weighted Query]
+    B2 --> B3[Vector Search]
+    B3 --> B4[Filter by Similarity]
+    B4 --> B5[Format with Metadata]
+
+    B5 --> C[CHAT GENERATION]
+    C --> C1[System Prompt + RAG Context + History]
+    C1 --> C2[Send to Ollama]
+    C2 --> C3[Stream Response]
+    C3 --> C4[Save to Chat History]
+
+    style A fill:#2d3748,stroke:#4299e1,stroke-width:3px,color:#fff
+    style B fill:#2d3748,stroke:#48bb78,stroke-width:3px,color:#fff
+    style C fill:#2d3748,stroke:#9f7aea,stroke-width:3px,color:#fff
 ```
 
 ### Complete Chat Data Flow
@@ -216,14 +222,14 @@ graph TD
 
     Q --> R[COMPLETE<br/>Total: ~8 seconds<br/>for 200 token response]
 
-    style A fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px,color:#fff
-    style E fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
-    style F fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
-    style G fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
-    style H fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
-    style I fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
-    style M fill:#1e4620,stroke:#4caf50,stroke-width:2px,color:#fff
-    style R fill:#3a1e5f,stroke:#9c27b0,stroke-width:2px,color:#fff
+    style A fill:#2d3748,stroke:#4299e1,stroke-width:3px,color:#fff
+    style E fill:#2d3748,stroke:#ed8936,stroke-width:3px,color:#fff
+    style F fill:#2d3748,stroke:#ed8936,stroke-width:3px,color:#fff
+    style G fill:#2d3748,stroke:#ed8936,stroke-width:3px,color:#fff
+    style H fill:#2d3748,stroke:#ed8936,stroke-width:3px,color:#fff
+    style I fill:#2d3748,stroke:#ed8936,stroke-width:3px,color:#fff
+    style M fill:#2d3748,stroke:#48bb78,stroke-width:3px,color:#fff
+    style R fill:#2d3748,stroke:#9f7aea,stroke-width:3px,color:#fff
 ```
 
 **Timing Summary:**
@@ -1616,44 +1622,40 @@ specific guidance.
 
 ### Intelligent RAG Data Flow
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                  USER QUERY PROCESSING                          │
-│                                                                 │
-│  User Message → Entity Extraction (track conversation topics)  │
-│              → Query Decomposition (if complex)                │
-│              → HyDE Generation (optional, for better retrieval)│
-└─────────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────────┐
-│              INTELLIGENT RETRIEVAL                              │
-│                                                                 │
-│  Enhanced Query → Multi-Query Vector Search                    │
-│                → Hybrid Search (vector + keyword)              │
-│                → Re-rank Results                               │
-│                → Filter by Similarity Threshold                │
-│                → Context Compression (remove irrelevant)       │
-└─────────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                  RESPONSE GENERATION                            │
-│                                                                 │
-│  Custom System Prompt + Compressed Context + Entity History    │
-│              → Send to Ollama LLM                              │
-│              → Stream Response                                 │
-│              → Add Citations [1], [2]                          │
-│              → Calculate Confidence Score                      │
-│              → Validate Answer Quality                         │
-└─────────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                RESPONSE ENHANCEMENT                             │
-│                                                                 │
-│  Professional Formatting → Add Executive Summary (if long)     │
-│                         → Add Follow-up Suggestions            │
-│                         → Add Smart Disclaimers (if needed)    │
-│                         → Append Source Citations              │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    A[USER QUERY PROCESSING] --> A1[User Message]
+    A1 --> A2[Entity Extraction<br/>track conversation topics]
+    A2 --> A3[Query Decomposition<br/>if complex]
+    A3 --> A4[HyDE Generation<br/>optional, for better retrieval]
+
+    A4 --> B[INTELLIGENT RETRIEVAL]
+    B --> B1[Enhanced Query]
+    B1 --> B2[Multi-Query Vector Search]
+    B2 --> B3[Hybrid Search<br/>vector + keyword]
+    B3 --> B4[Re-rank Results]
+    B4 --> B5[Filter by Similarity Threshold]
+    B5 --> B6[Context Compression<br/>remove irrelevant]
+
+    B6 --> C[RESPONSE GENERATION]
+    C --> C1[Custom System Prompt +<br/>Compressed Context +<br/>Entity History]
+    C1 --> C2[Send to Ollama LLM]
+    C2 --> C3[Stream Response]
+    C3 --> C4[Add Citations 1, 2]
+    C4 --> C5[Calculate Confidence Score]
+    C5 --> C6[Validate Answer Quality]
+
+    C6 --> D[RESPONSE ENHANCEMENT]
+    D --> D1[Professional Formatting]
+    D1 --> D2[Add Executive Summary<br/>if long]
+    D2 --> D3[Add Follow-up Suggestions]
+    D3 --> D4[Add Smart Disclaimers<br/>if needed]
+    D4 --> D5[Append Source Citations]
+
+    style A fill:#2d3748,stroke:#4299e1,stroke-width:3px,color:#fff
+    style B fill:#2d3748,stroke:#ed8936,stroke-width:3px,color:#fff
+    style C fill:#2d3748,stroke:#48bb78,stroke-width:3px,color:#fff
+    style D fill:#2d3748,stroke:#9f7aea,stroke-width:3px,color:#fff
 ```
 
 ### Configuration
