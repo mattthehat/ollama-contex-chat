@@ -1923,7 +1923,7 @@ Complete end-to-end data flow visualisation:
 
 ```mermaid
 graph TB
-    subgraph INGESTION["📄 DOCUMENT INGESTION PIPELINE"]
+    subgraph INGESTION["DOCUMENT INGESTION PIPELINE"]
         A1[USER UPLOADS DOCUMENT] --> A2[routes/library/new.tsx<br/>Handle File Upload<br/>Accept: .pdf, .txt, .md, .js, .py, etc.<br/>Validate file size and type]
         A2 --> A3[lib/document.server.ts<br/>Convert to Semantic Markdown<br/>PDF → pdf2md extraction<br/>Plain text → Heuristic heading detection<br/>Code/Markdown → Direct storage]
         A3 --> A4[lib/document.server.ts<br/>Chunk with Hierarchy<br/>chunkMarkdown: Respect headings, track hierarchy<br/>chunkText: Sentence-based with 50 char overlap<br/>chunkCode: Preserve function/class boundaries<br/>Max 300 chars per chunk]
@@ -1931,7 +1931,7 @@ graph TB
         A5 --> A6[schema/documents.sql<br/>Store in MariaDB<br/>documents table: metadata + semantic markdown<br/>document_chunks table: chunks + VECTOR 768<br/>Auto-create vector index]
     end
 
-    subgraph RETRIEVAL["🔍 RAG RETRIEVAL PIPELINE"]
+    subgraph RETRIEVAL["RAG RETRIEVAL PIPELINE"]
         B1[USER ASKS QUESTION] --> B2[routes/chats/detail.tsx<br/>Calculate Dynamic Chunk Limit<br/>availableTokens = 16384 * 0.7 - system - history - msg<br/>chunkLimit = max 3, min 10]
         B2 --> B3[lib/document.server.ts<br/>Build Weighted Query<br/>Current message x2 weight<br/>+ Last 3 user messages<br/>Limit to ~500 words]
         B3 --> B4[lib/document.server.ts<br/>Generate Query Embedding<br/>Check LRU cache first 40-140x faster if hit<br/>POST to Ollama /api/embed<br/>Returns 768-dimensional vector]
@@ -1940,7 +1940,7 @@ graph TB
         B6 --> B7[lib/document.server.ts<br/>Format RAG Context<br/>Markdown format with metadata<br/>Include: page, section, hierarchy, relevance %<br/>Add citation instructions for LLM]
     end
 
-    subgraph GENERATION["💬 RESPONSE GENERATION PIPELINE"]
+    subgraph GENERATION["RESPONSE GENERATION PIPELINE"]
         C1[lib/chat.ts<br/>Build Message Array<br/>System: prompt + RAG context combined<br/>History: recent messages in token budget<br/>User: current message]
         C2[hooks/useOllama.ts<br/>Send to Ollama Streaming<br/>POST to localhost:11434/api/chat<br/>stream: true newline-delimited JSON<br/>Read response via ReadableStream]
         C3[routes/chats/detail.tsx<br/>Display Streaming Response<br/>Buffer incomplete words for clean display<br/>Update UI progressively as tokens arrive<br/>Show typing indicator while streaming]
