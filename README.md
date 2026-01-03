@@ -175,6 +175,586 @@ Our RAG implementation consists of three main pipelines:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Complete Chat Data Flow
+
+This section explains the complete journey from when a user sends a message to receiving an AI response. Each stage is explained in detail with file references and timing information.
+
+```mermaid
+graph TD
+    A[STAGE 1: USER INPUT<br/>User types message → Press Enter<br/>Time: <10ms] --> B[STAGE 2: LOAD CONFIGURATION<br/>Query database for model settings,<br/>RAG config, feature flags, documents<br/>Time: 5-15ms]
+
+    B --> C[STAGE 3: LOAD CONVERSATION HISTORY<br/>Query last 10 messages from DB<br/>Format as message array<br/>Time: 3-8ms]
+
+    C --> D{Documents<br/>Selected?}
+
+    D -->|Yes| E[STAGE 4: RAG PIPELINE]
+    D -->|No| J[STAGE 5: BUILD SYSTEM PROMPT]
+
+    E --> F[STAGE 4a: GENERATE QUERY EMBEDDING<br/>Send to Ollama /api/embed<br/>Receive 768-dimensional vector<br/>Check LRU cache first<br/>Time: 50-150ms or <1ms cached]
+
+    F --> G[STAGE 4b: VECTOR SIMILARITY SEARCH<br/>Query MariaDB with VEC_DISTANCE_COSINE<br/>Compare against all chunk embeddings<br/>Calculate similarity scores 0.0-1.0<br/>Time: 50-200ms]
+
+    G --> H[STAGE 4c: FILTER BY SIMILARITY<br/>Filter by threshold e.g. 0.3<br/>Take top N chunks e.g. 5<br/>Time: <1ms]
+
+    H --> I[STAGE 4d: FORMAT CONTEXT<br/>Extract metadata page, section<br/>Format as markdown with citations<br/>Calculate avg similarity<br/>Time: 1-3ms]
+
+    I --> J[STAGE 5: BUILD SYSTEM PROMPT<br/>Combine: custom prompt +<br/>conversation summary +<br/>RAG context<br/>Time: <1ms]
+
+    J --> K[STAGE 6: CONSTRUCT MESSAGES<br/>Build OpenAI-compatible format:<br/>system, user, assistant array<br/>Time: <1ms]
+
+    K --> L[STAGE 7: SEND TO OLLAMA API<br/>POST /api/chat with messages,<br/>model name, parameters,<br/>stream: true<br/>Time: 100-500ms to first token]
+
+    L --> M[STAGE 8: STREAM RESPONSE TOKENS<br/>Ollama sends Server-Sent Events<br/>Each token arrives sequentially<br/>Speed: 30-80 tok/s small,<br/>10-30 tok/s medium<br/>Time: 2.5-7s for 200 tokens]
+
+    M --> N[STAGE 9: DISPLAY IN UI<br/>React receives tokens in real-time<br/>Appends to response text<br/>Typewriter-style output<br/>Time: Real-time, no delay]
+
+    N --> O[STAGE 10: ADD CITATIONS<br/>If enabled, append formatted sources:<br/>1 Doc.pdf - Page 12<br/>2 Doc.pdf - Page 13<br/>Time: <1ms]
+
+    O --> P[STAGE 11: SAVE TO DATABASE<br/>INSERT user message<br/>INSERT assistant response<br/>Single transaction<br/>Time: 5-15ms]
+
+    P --> Q[STAGE 12: UPDATE CHAT HISTORY<br/>React Router revalidates loader<br/>Re-fetch from database<br/>UI updates conversation<br/>Time: 10-30ms]
+
+    Q --> R[COMPLETE<br/>Total: ~8 seconds<br/>for 200 token response]
+
+    style A fill:#e1f5ff
+    style E fill:#fff4e1
+    style F fill:#fff4e1
+    style G fill:#fff4e1
+    style H fill:#fff4e1
+    style I fill:#fff4e1
+    style M fill:#e8f5e9
+    style R fill:#f3e5f5
+```
+
+**Timing Summary:**
+- Time to first token: ~400-900ms (Stages 1-7)
+- Response generation: ~2.5-7s (Stage 8, depends on model and response length)
+- Total time: ~8 seconds for 200 token response on small model
+
+**Key Optimisations:**
+- LRU embedding cache: <1ms vs 50-150ms for repeated queries
+- MariaDB vector index: Fast similarity search even with thousands of chunks
+- Streaming responses: User sees output immediately, no wait for completion
+- Limited history: Only 10 messages loaded (fast DB query)
+- Parallel processing: Embeddings generated in batches (5-10x faster ingestion)
+
+#### Stage 1: User Message Submission
+
+**Location**: [app/routes/chats/detail.tsx](app/routes/chats/detail.tsx) - Lines 340-380
+
+**What happens**:
+1. User types message in textarea
+2. Presses Enter (or Shift+Enter for new line)
+3. Form submits via React Router action
+4. Message is validated (must not be empty)
+
+**Data sent**:
+```typescript
+{
+  message: "How do I install the software?",
+  customModelId: 42,
+  documentIds: [1, 5, 12],  // Selected from sidebar
+  chatId: "uuid-abc-123"
+}
+```
+
+**Time**: <10ms (instant form submission)
+
+#### Stage 2: Load Model Configuration
+
+**Location**: [app/lib/models.server.ts](app/lib/models.server.ts) - `getCustomModelByIdWithDocuments()`
+
+**What happens**:
+1. Query database for model settings
+2. Load model's system prompt, temperature, RAG settings
+3. Load associated document UUIDs
+4. Load intelligent RAG feature flags
+
+**Database query**:
+```sql
+SELECT
+  m.*,
+  d.documentUUID, d.documentTitle
+FROM custom_models m
+LEFT JOIN model_documents md ON m.modelId = md.modelId
+LEFT JOIN documents d ON md.documentId = d.documentId
+WHERE m.modelId = ?
+```
+
+**Data retrieved**:
+```typescript
+{
+  modelName: "Technical Support Bot",
+  systemPrompt: "You are a helpful technical support assistant...",
+  ollamaModel: "llama3.2:3b",
+  ollamaTemperature: 0.7,
+  ragMaxChunks: 5,
+  ragSimilarityThreshold: 0.3,
+  ragUseHyDE: true,
+  ragEnableCitations: true,
+  documents: [
+    { documentUUID: "uuid-1", documentTitle: "User Manual.pdf" },
+    { documentUUID: "uuid-2", documentTitle: "Installation Guide.pdf" }
+  ]
+}
+```
+
+**Time**: 5-15ms (single database query with joins)
+
+#### Stage 3: Load Conversation History
+
+**Location**: [app/lib/chat.server.ts](app/lib/chat.server.ts) - `getChatMessages()`
+
+**What happens**:
+1. Query database for previous messages in this chat
+2. Load last 10 messages (to fit in context window)
+3. Format as `{ role: 'user' | 'assistant', content: string }[]`
+
+**Database query**:
+```sql
+SELECT messageUser, messagesystem, messageCreated
+FROM messages
+WHERE messageChat = ?
+ORDER BY messageCreated ASC
+LIMIT 10
+```
+
+**Data retrieved**:
+```typescript
+[
+  { role: 'user', content: 'What are the system requirements?' },
+  { role: 'assistant', content: 'The system requires 8GB RAM minimum...' },
+  { role: 'user', content: 'How do I install the software?' }  // Current message
+]
+```
+
+**Time**: 3-8ms (indexed query)
+
+#### Stage 4: RAG Retrieval Pipeline
+
+**Location**: [app/lib/document.server.ts](app/lib/document.server.ts) - `buildRAGContext()`
+
+This is the core of the RAG system. Multiple steps happen here:
+
+##### Stage 4a: Generate Query Embedding
+
+**What happens**:
+1. Take user's current message
+2. Optionally: Weight it 2x in conversation context (current message is most important)
+3. Send to Ollama's `/api/embed` endpoint
+4. Receive 768-dimensional vector
+
+**API call**:
+```typescript
+POST http://localhost:11434/api/embed
+{
+  "model": "nomic-embed-text:latest",
+  "input": "How do I install the software?"
+}
+```
+
+**Response**:
+```typescript
+{
+  "embeddings": [
+    [0.023, -0.145, 0.089, ..., 0.012]  // 768 numbers
+  ]
+}
+```
+
+**Time**: 50-150ms (depends on Ollama performance)
+
+**Cache check**: LRU cache checked first (key = first 1000 chars). If hit: <1ms
+
+##### Stage 4b: Vector Similarity Search
+
+**Location**: [app/lib/db.server.ts](app/lib/db.server.ts) - `searchVectorData()`
+
+**What happens**:
+1. Query MariaDB with cosine similarity function
+2. Compare query embedding against ALL chunk embeddings in selected documents
+3. Calculate similarity score for each chunk (0.0 to 1.0)
+4. Sort by similarity descending
+
+**Database query**:
+```sql
+SELECT
+  dc.chunkContent,
+  dc.chunkMetadata,
+  d.documentTitle,
+  (1 - VEC_DISTANCE_COSINE(dc.chunkEmbedding, VEC_FromText(?))) AS similarity
+FROM document_chunks dc
+INNER JOIN documents d ON dc.chunkDocumentId = d.documentId
+WHERE d.documentUUID IN (?, ?, ...)  -- Selected documents only
+ORDER BY similarity DESC
+```
+
+**Explanation of similarity calculation**:
+- `VEC_DISTANCE_COSINE()` returns distance (0 = identical, 2 = opposite)
+- `1 - distance` converts to similarity (1 = identical, -1 = opposite)
+- Higher similarity = more relevant chunk
+
+**Time**: 50-200ms (depends on number of chunks - MariaDB vector index makes this fast)
+
+##### Stage 4c: Filter by Similarity Threshold
+
+**What happens**:
+1. Filter results where similarity >= configured threshold (e.g., 0.3)
+2. Take top N chunks (e.g., 5) based on model's `ragMaxChunks` setting
+3. This ensures only relevant context is included
+
+**Example filtering**:
+```typescript
+// Results from database:
+[
+  { similarity: 0.842, content: "To install, download installer..." },  // ✅ Included
+  { similarity: 0.756, content: "System requirements: 8GB RAM..." },    // ✅ Included
+  { similarity: 0.623, content: "Troubleshooting: If install fails..." }, // ✅ Included
+  { similarity: 0.412, content: "API documentation for developers..." }, // ✅ Included
+  { similarity: 0.287, content: "Company history and mission..." },      // ❌ Below threshold
+]
+
+// After filtering (threshold=0.3) and limiting (maxChunks=5):
+Top 4 chunks included in context
+```
+
+**Time**: <1ms (in-memory filtering)
+
+##### Stage 4d: Format Context with Metadata
+
+**Location**: [app/lib/document.server.ts](app/lib/document.server.ts) - `formatRAGContext()`
+
+**What happens**:
+1. For each chunk, extract metadata (page number, section, heading hierarchy)
+2. Format as markdown with clear source attribution
+3. Add instructions for LLM on how to use context
+4. Calculate average similarity score for confidence tracking
+
+**Formatted output**:
+```markdown
+You have access to the following relevant information from the user's documents.
+Use this context to answer their question accurately. Cite sources using [1], [2] notation.
+
+---
+
+Source [1]: Installation Guide.pdf (Page 12)
+Section: Software Installation > Prerequisites
+
+To install the software, first ensure you meet the system requirements:
+- 8GB RAM minimum (16GB recommended)
+- Windows 10 or later
+- 2GB free disk space
+
+Download the installer from our website and run the .exe file...
+
+---
+
+Source [2]: Installation Guide.pdf (Page 13)
+Section: Software Installation > Installation Steps
+
+1. Run the downloaded installer
+2. Accept the license agreement
+3. Choose installation directory
+4. Click "Install" and wait for completion
+5. Restart your computer when prompted
+
+---
+
+[End of retrieved context]
+
+When answering, cite sources like this: "According to the installation guide [1]..."
+```
+
+**Metadata extracted**:
+```typescript
+{
+  chunks: 4,
+  avgSimilarity: 0.658,
+  sources: [
+    { document: "Installation Guide.pdf", page: 12, section: "Prerequisites" },
+    { document: "Installation Guide.pdf", page: 13, section: "Installation Steps" }
+  ]
+}
+```
+
+**Time**: 1-3ms (string formatting)
+
+#### Stage 5: Build Complete System Prompt
+
+**Location**: [app/lib/intelligent-chat.server.ts](app/lib/intelligent-chat.server.ts) - Lines 123-125
+
+**What happens**:
+1. Start with model's custom system prompt (or default)
+2. Append conversation summary (if multi-turn chat)
+3. Append RAG context from Stage 4
+4. Result is a complete prompt that guides the LLM
+
+**Custom system prompt** (from model config):
+```
+You are a helpful technical support assistant with access to documentation.
+When answering questions, cite relevant information from the provided context.
+Be concise and professional.
+```
+
+**Conversation summary** (if enabled):
+```
+Conversation context: The user previously asked about system requirements
+and was informed that 8GB RAM minimum is needed.
+```
+
+**Final combined prompt**:
+```
+You are a helpful technical support assistant with access to documentation.
+When answering questions, cite relevant information from the provided context.
+Be concise and professional.
+
+Conversation context: The user previously asked about system requirements
+and was informed that 8GB RAM minimum is needed.
+
+You have access to the following relevant information from the user's documents.
+Use this context to answer their question accurately. Cite sources using [1], [2] notation.
+
+---
+
+Source [1]: Installation Guide.pdf (Page 12)
+[... full RAG context from Stage 4 ...]
+```
+
+**Time**: <1ms (string concatenation)
+
+#### Stage 6: Construct Messages Array
+
+**Location**: [app/lib/intelligent-chat.server.ts](app/lib/intelligent-chat.server.ts) - Lines 198-202
+
+**What happens**:
+1. Build array of messages in OpenAI-compatible format
+2. Include system prompt, conversation history, and current message
+3. Limit history to last 10 messages to fit in context window
+
+**Messages array**:
+```typescript
+[
+  {
+    role: "system",
+    content: "[Full system prompt from Stage 5]"
+  },
+  {
+    role: "user",
+    content: "What are the system requirements?"
+  },
+  {
+    role: "assistant",
+    content: "The system requires 8GB RAM minimum..."
+  },
+  {
+    role: "user",
+    content: "How do I install the software?"
+  }
+]
+```
+
+**Token count estimation**:
+- System prompt + RAG context: ~2,000-4,000 tokens
+- Conversation history (10 messages): ~500-1,500 tokens
+- Current message: ~20-100 tokens
+- **Total input**: ~2,500-5,500 tokens (well within 16K context window)
+
+**Time**: <1ms (array construction)
+
+#### Stage 7: Send to Ollama API
+
+**Location**: [app/lib/intelligent-chat.server.ts](app/lib/intelligent-chat.server.ts) - Lines 204-219
+
+**What happens**:
+1. POST to Ollama's `/api/chat` endpoint
+2. Request streaming response for real-time UI updates
+3. Include model parameters (temperature, top_p, num_ctx)
+
+**API call**:
+```typescript
+POST http://localhost:11434/api/chat
+{
+  "model": "llama3.2:3b",
+  "messages": [/* array from Stage 6 */],
+  "stream": true,
+  "options": {
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "num_ctx": 16384
+  }
+}
+```
+
+**Time**: 100-500ms until first token (depends on model size and hardware)
+
+#### Stage 8: Stream Response Tokens
+
+**Location**: [app/lib/intelligent-chat.server.ts](app/lib/intelligent-chat.server.ts) - Lines 317-347
+
+**What happens**:
+1. Ollama sends response as Server-Sent Events (SSE) stream
+2. Each event contains one or more tokens
+3. Tokens are yielded to the UI in real-time
+4. User sees response appear word-by-word
+
+**Stream format**:
+```json
+{"message":{"role":"assistant","content":"To"}}
+{"message":{"role":"assistant","content":" install"}}
+{"message":{"role":"assistant","content":" the"}}
+{"message":{"role":"assistant","content":" software"}}
+{"message":{"role":"assistant","content":","}}
+{"message":{"role":"assistant","content":" follow"}}
+// ... continues until complete
+{"done":true}
+```
+
+**Streaming speed**:
+- Small model (1-3B params): 30-80 tokens/second
+- Medium model (7-13B params): 10-30 tokens/second
+- Large model (30B+ params): 3-10 tokens/second
+
+**Total generation time** (for 200 token response):
+- Small model: 2.5-7 seconds
+- Medium model: 7-20 seconds
+
+#### Stage 9: Display in UI
+
+**Location**: [app/routes/chats/detail.tsx](app/routes/chats/detail.tsx) - Lines 200-250
+
+**What happens**:
+1. React component receives streamed tokens
+2. Appends each token to current response text
+3. Re-renders UI to show growing response
+4. User sees natural, typewriter-style output
+
+**UI state updates**:
+```typescript
+// Initial state
+response = ""
+
+// After first chunk
+response = "To"
+
+// After second chunk
+response = "To install"
+
+// After third chunk
+response = "To install the"
+
+// ... continues until complete
+response = "To install the software, follow these steps:\n\n1. Download..."
+```
+
+**Time**: Real-time as tokens arrive (no delay)
+
+#### Stage 10: Add Citations
+
+**Location**: [app/lib/intelligent-chat.server.ts](app/lib/intelligent-chat.server.ts) - Lines 350-357
+
+**What happens** (if citations enabled):
+1. After response streaming completes
+2. Append formatted source citations
+3. Shows user which documents were used
+
+**Citation format**:
+```markdown
+---
+
+**Sources:**
+[1] Installation Guide.pdf - Page 12 (Software Installation > Prerequisites)
+[2] Installation Guide.pdf - Page 13 (Software Installation > Installation Steps)
+```
+
+**Time**: <1ms (appended after stream completes)
+
+#### Stage 11: Save to Database
+
+**Location**: [app/lib/chat.server.ts](app/lib/chat.server.ts) - `insertMessage()`
+
+**What happens**:
+1. Complete response is saved to messages table
+2. Both user message and assistant response are stored
+3. Timestamp recorded for ordering
+
+**Database insert**:
+```sql
+INSERT INTO messages (messageChat, messageUser, messagesystem, messageCreated)
+VALUES
+  (?, 'How do I install the software?', NULL, NOW()),
+  (?, NULL, 'To install the software, follow...', NOW())
+```
+
+**Time**: 5-15ms (two inserts with transaction)
+
+#### Stage 12: Update Chat History
+
+**Location**: [app/routes/chats/detail.tsx](app/routes/chats/detail.tsx) - Remix revalidation
+
+**What happens**:
+1. React Router automatically revalidates loader data
+2. Chat history re-fetched from database
+3. UI updates to show new messages in conversation
+4. Chat is ready for next message
+
+**Time**: 10-30ms (re-fetch and re-render)
+
+### Complete Timing Breakdown
+
+For a typical chat interaction with RAG enabled:
+
+| Stage | Operation | Time | Cumulative |
+|-------|-----------|------|------------|
+| 1 | User message submission | <10ms | 10ms |
+| 2 | Load model configuration | 5-15ms | 25ms |
+| 3 | Load conversation history | 3-8ms | 33ms |
+| 4a | Generate query embedding | 50-150ms | 183ms |
+| 4b | Vector similarity search | 50-200ms | 383ms |
+| 4c | Filter by threshold | <1ms | 384ms |
+| 4d | Format context | 1-3ms | 387ms |
+| 5 | Build system prompt | <1ms | 388ms |
+| 6 | Construct messages array | <1ms | 389ms |
+| 7 | Send to Ollama | 100-500ms | 889ms |
+| 8 | Generate response (200 tokens) | 2,500-7,000ms | 7,889ms |
+| 9 | Display in UI | Real-time | - |
+| 10 | Add citations | <1ms | 7,890ms |
+| 11 | Save to database | 5-15ms | 7,905ms |
+| 12 | Update chat history | 10-30ms | 7,935ms |
+
+**Total time to first token**: ~400-900ms (Stages 1-7)
+**Total time to complete response**: ~8 seconds (for 200 token response on small model)
+
+### Performance Optimisations in the Pipeline
+
+1. **Embedding cache**: Repeated queries hit cache (<1ms vs 50-150ms)
+2. **Parallel batch embedding**: Document ingestion 5-10x faster
+3. **MariaDB vector index**: Fast similarity search even with thousands of chunks
+4. **Streaming responses**: User sees output immediately, doesn't wait for completion
+5. **Limited conversation history**: Only last 10 messages loaded (keeps DB query fast)
+6. **Weighted query embedding**: Current message weighted 2x for better relevance
+7. **Similarity threshold**: Filters out irrelevant chunks, reduces LLM context size
+
+### Error Handling at Each Stage
+
+The system includes circuit breakers and error handling:
+
+- **Stage 2-4**: If DB connection fails → Return error message to user
+- **Stage 4a**: If embedding fails → Retry once, then fall back to keyword search
+- **Stage 4b**: If vector search fails → Fall back to full-text search
+- **Stage 7**: If Ollama connection fails → Circuit breaker trips after 3 failures
+- **Stage 8**: If streaming fails → Buffer and retry, or return partial response
+
+**Circuit breaker configuration**:
+```typescript
+{
+  failureThreshold: 3,    // Trip after 3 failures
+  successThreshold: 2,    // Reset after 2 successes
+  timeout: 30000          // 30 second timeout
+}
+```
+
+This ensures the application degrades gracefully rather than crashing completely.
+
 ---
 
 ## Document Storage & Indexing
@@ -814,6 +1394,315 @@ Summary of optimisations implemented:
 [RAG] Search: 157ms | Chunks: 3/5 | Avg Similarity: 0.742
 [Ollama] First token: 234ms | Total generation: 2.1s (47 tokens)
 ```
+
+---
+
+## Intelligent RAG Features
+
+The application includes a sophisticated set of intelligent RAG features designed to improve retrieval accuracy, response quality, and professional output formatting. These features can be enabled per-model via the Custom Model CMS.
+
+### Core Intelligence Features
+
+#### 1. HyDE (Hypothetical Document Embeddings)
+
+**Purpose**: Improves retrieval accuracy by 30-50% for complex queries.
+
+**How it works**:
+1. Generate a hypothetical answer to the user's question using the LLM
+2. Embed the hypothetical answer instead of the raw query
+3. Search for document chunks similar to the hypothetical answer
+4. Documents that would contain the answer are more similar than documents matching just query keywords
+
+**Example**:
+```
+User query: "How do I reset my password?"
+
+Standard retrieval: Searches for chunks containing "reset" and "password"
+HyDE retrieval: Generates "To reset your password, navigate to Settings..."
+                Then searches for chunks similar to that explanation
+```
+
+**Implementation**: [app/lib/intelligent-rag.server.ts](app/lib/intelligent-rag.server.ts) - `generateHypotheticalAnswer()`
+
+**Performance gain**: Better matches for how-to questions and conceptual queries
+
+#### 2. Query Decomposition
+
+**Purpose**: Breaks complex multi-part questions into focused sub-queries for comprehensive answers.
+
+**How it works**:
+1. LLM analyses the user's question
+2. Decomposes it into 2-4 atomic sub-questions
+3. Retrieves relevant chunks for each sub-question independently
+4. Combines and de-duplicates results before sending to LLM
+
+**Example**:
+```
+User query: "What are the system requirements and how do I install the software?"
+
+Decomposed into:
+1. "What are the system requirements?"
+2. "How do I install the software?"
+
+Each sub-query retrieves targeted chunks, ensuring both aspects are covered
+```
+
+**Implementation**: [app/lib/intelligent-rag.server.ts](app/lib/intelligent-rag.server.ts) - `decomposeQuery()`
+
+**Performance gain**: Ensures complex questions get comprehensive context
+
+#### 3. Context Compression
+
+**Purpose**: Removes irrelevant sentences from retrieved chunks to fit 2-3x more relevant content in the context window.
+
+**How it works**:
+1. Retrieve chunks using standard vector search
+2. For each chunk, extract only sentences relevant to the query
+3. Remove filler content, tangential information, and repetition
+4. Preserve core facts and critical context
+
+**Example**:
+```
+Original chunk (180 words):
+"Our company was founded in 1995 in London. Over the years we've grown to serve...
+[lots of background]...To install the software, first download the installer from
+our website. Then run the .exe file and follow the on-screen prompts..."
+
+Compressed chunk (45 words):
+"To install the software, first download the installer from our website. Then run
+the .exe file and follow the on-screen prompts..."
+```
+
+**Implementation**: [app/lib/intelligent-rag.server.ts](app/lib/intelligent-rag.server.ts) - `compressContext()`
+
+**Performance gain**: More relevant information fits in the same token budget
+
+#### 4. Entity Tracking
+
+**Purpose**: Maintains conversation context by tracking mentioned topics, concepts, and entities across messages.
+
+**How it works**:
+1. Extract named entities (people, places, products, concepts) from conversation history
+2. Weight recent entities higher than older ones
+3. Use entity list to inform retrieval (boost chunks mentioning tracked entities)
+4. Helps LLM maintain coherent multi-turn conversations
+
+**Example**:
+```
+User: "Tell me about the authentication system"
+System: [Tracks: "authentication", "auth system"]
+
+User: "How do I configure it?"
+System: [Knows "it" = "authentication system", retrieves auth configuration docs]
+```
+
+**Implementation**: [app/lib/intelligent-rag.server.ts](app/lib/intelligent-rag.server.ts) - `extractEntities()`
+
+**Performance gain**: Better context continuity in multi-turn conversations
+
+### Quality and Accuracy Features
+
+#### 5. Citation System
+
+**Purpose**: Adds inline [1], [2] style citations to responses with source attribution.
+
+**How it works**:
+1. Each retrieved chunk includes document name and page number metadata
+2. LLM is instructed to add citation markers when using information from sources
+3. System appends a "Sources" section at the end with full references
+
+**Example output**:
+```
+According to the installation guide, you need 8GB RAM minimum [1] and
+16GB is recommended for optimal performance [2].
+
+Sources:
+[1] Installation Guide - Page 3 (System Requirements)
+[2] Installation Guide - Page 3 (Recommendations)
+```
+
+**Implementation**: [app/lib/rag-enhanced.server.ts](app/lib/rag-enhanced.server.ts) - `buildEnhancedRAGContext()`
+
+**Professional use case**: Essential for compliance, education, and professional advisory applications
+
+#### 6. Confidence Scoring
+
+**Purpose**: Calculates high/medium/low confidence levels for answer quality and relevance.
+
+**How it works**:
+1. Analyse retrieved chunk similarity scores
+2. Check for hallucination indicators (generic phrases, hedging language)
+3. Verify answer relevance to the query
+4. Assign confidence level based on evidence strength
+
+**Confidence criteria**:
+- **High**: Average similarity > 0.7, specific facts cited, no hedging
+- **Medium**: Average similarity 0.5-0.7, some relevant information, minor hedging
+- **Low**: Average similarity < 0.5, mostly generic information, heavy hedging
+
+**Implementation**: [app/lib/intelligent-rag.server.ts](app/lib/intelligent-rag.server.ts) - `validateAnswer()`
+
+**Use case**: Helps users judge reliability of AI responses, especially for critical decisions
+
+### Response Enhancement Features
+
+#### 7. Professional Formatting
+
+**Purpose**: Enhances responses with proper markdown structure, code blocks, and formatting.
+
+**How it works**:
+1. Detect code snippets and wrap in proper markdown code blocks
+2. Format lists, headings, and tables consistently
+3. Add emphasis (bold, italic) for key concepts
+4. Ensure consistent spacing and hierarchy
+
+**Implementation**: [app/lib/response-formatter.ts](app/lib/response-formatter.ts) - `enhanceResponse()`
+
+#### 8. Executive Summaries
+
+**Purpose**: Adds brief summaries for long responses (300+ words).
+
+**Example**:
+```
+**Summary**: To install the software, download the installer, run it, and follow
+the prompts. Requires 8GB RAM and Windows 10+.
+
+[Full detailed response follows...]
+```
+
+**Use case**: Allows users to quickly grasp the answer before reading details
+
+#### 9. Follow-up Suggestions
+
+**Purpose**: Suggests relevant follow-up questions based on conversation context.
+
+**How it works**:
+1. Analyse entities mentioned in the current response
+2. Identify common next questions for that topic
+3. Generate 2-3 contextually relevant follow-up questions
+
+**Example**:
+```
+[Response about password reset process]
+
+You might also want to know:
+- How do I enable two-factor authentication?
+- What should I do if I don't receive the reset email?
+- How often should I change my password?
+```
+
+**Implementation**: [app/lib/response-formatter.ts](app/lib/response-formatter.ts)
+
+#### 10. Smart Disclaimers
+
+**Purpose**: Auto-adds appropriate disclaimers based on topic (legal, medical, financial, security).
+
+**Topic detection**:
+- **Legal**: Contract, liability, rights, court, law
+- **Medical**: Symptoms, diagnosis, treatment, medicine
+- **Financial**: Investment, tax, loan, financial advice
+- **Security**: Password, encryption, vulnerability, exploit
+
+**Example disclaimer**:
+```
+[Response about password security]
+
+Note: This information is for educational purposes. Always follow your
+organisation's security policies and consult your IT security team for
+specific guidance.
+```
+
+**Implementation**: [app/lib/response-formatter.ts](app/lib/response-formatter.ts)
+
+### Intelligent RAG Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  USER QUERY PROCESSING                          │
+│                                                                 │
+│  User Message → Entity Extraction (track conversation topics)  │
+│              → Query Decomposition (if complex)                │
+│              → HyDE Generation (optional, for better retrieval)│
+└─────────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────────┐
+│              INTELLIGENT RETRIEVAL                              │
+│                                                                 │
+│  Enhanced Query → Multi-Query Vector Search                    │
+│                → Hybrid Search (vector + keyword)              │
+│                → Re-rank Results                               │
+│                → Filter by Similarity Threshold                │
+│                → Context Compression (remove irrelevant)       │
+└─────────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                  RESPONSE GENERATION                            │
+│                                                                 │
+│  Custom System Prompt + Compressed Context + Entity History    │
+│              → Send to Ollama LLM                              │
+│              → Stream Response                                 │
+│              → Add Citations [1], [2]                          │
+│              → Calculate Confidence Score                      │
+│              → Validate Answer Quality                         │
+└─────────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                RESPONSE ENHANCEMENT                             │
+│                                                                 │
+│  Professional Formatting → Add Executive Summary (if long)     │
+│                         → Add Follow-up Suggestions            │
+│                         → Add Smart Disclaimers (if needed)    │
+│                         → Append Source Citations              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Configuration
+
+Intelligent RAG features are configured per-model via the Custom Model CMS:
+
+1. Navigate to **Models** → Edit Model
+2. Scroll to **Intelligent RAG Features** section
+3. Enable/disable features individually based on your use case
+
+**Recommended configurations**:
+
+**Professional Advisory (e.g., legal, medical, safeguarding)**:
+- HyDE: ON
+- Query Decomposition: ON
+- Context Compression: ON
+- Citations: ON
+- Confidence Scoring: ON
+- Smart Disclaimers: ON
+- Follow-up Suggestions: OFF (keep responses focused)
+- Executive Summary: OFF (professionals read full detail)
+
+**General Knowledge Base**:
+- HyDE: ON
+- Query Decomposition: ON
+- Context Compression: ON
+- Citations: ON
+- Confidence Scoring: ON
+- Smart Disclaimers: OFF
+- Follow-up Suggestions: ON
+- Executive Summary: ON (for long technical docs)
+
+**Code Documentation Assistant**:
+- HyDE: OFF (code queries are usually specific)
+- Query Decomposition: ON
+- Context Compression: OFF (preserve all code context)
+- Citations: ON
+- Confidence Scoring: OFF
+- Smart Disclaimers: OFF
+- Follow-up Suggestions: ON
+- Executive Summary: OFF
+
+**Performance considerations**:
+- HyDE adds 1 LLM call before retrieval (~200-500ms overhead)
+- Query Decomposition adds 1 LLM call (~300-700ms overhead)
+- Context Compression adds 1 LLM call per chunk (~50-150ms per chunk)
+- Other features add minimal latency (<50ms total)
+
+For best performance on slower hardware, disable HyDE and Query Decomposition. The quality improvement is most noticeable for complex, conceptual queries.
 
 ---
 
