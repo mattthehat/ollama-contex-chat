@@ -216,14 +216,14 @@ graph TD
 
     Q --> R[COMPLETE<br/>Total: ~8 seconds<br/>for 200 token response]
 
-    style A fill:#e1f5ff
-    style E fill:#fff4e1
-    style F fill:#fff4e1
-    style G fill:#fff4e1
-    style H fill:#fff4e1
-    style I fill:#fff4e1
-    style M fill:#e8f5e9
-    style R fill:#f3e5f5
+    style A fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px,color:#fff
+    style E fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
+    style F fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
+    style G fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
+    style H fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
+    style I fill:#3d2817,stroke:#ff9800,stroke-width:2px,color:#fff
+    style M fill:#1e4620,stroke:#4caf50,stroke-width:2px,color:#fff
+    style R fill:#3a1e5f,stroke:#9c27b0,stroke-width:2px,color:#fff
 ```
 
 **Timing Summary:**
