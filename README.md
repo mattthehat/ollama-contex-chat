@@ -1921,121 +1921,44 @@ similarity = 1 - distance
 
 Complete end-to-end data flow visualisation:
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                     USER UPLOADS DOCUMENT                        │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [routes/library/new.tsx] Handle File Upload                    │
-│    • Accept: .pdf, .txt, .md, .js, .py, etc.                    │
-│    • Validate file size and type                                 │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/document.server.ts] Convert to Semantic Markdown          │
-│    • PDF → pdf2md extraction                                     │
-│    • Plain text → Heuristic heading detection                    │
-│    • Code/Markdown → Direct storage                              │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/document.server.ts] Chunk with Hierarchy                  │
-│    • chunkMarkdown(): Respect headings, track hierarchy          │
-│    • chunkText(): Sentence-based with 50 char overlap            │
-│    • chunkCode(): Preserve function/class boundaries             │
-│    • Max 300 chars per chunk (fits in 2048 token limit)          │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/document.server.ts] Generate Embeddings (Parallel)        │
-│    • Batch size: 10 concurrent requests                          │
-│    • Model: nomic-embed-text:latest (768 dims)                   │
-│    • Cache check: LRU cache (500 max, 15-min TTL)                │
-│    • Performance: 5-10x faster than sequential                   │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [schema/documents.sql] Store in MariaDB                        │
-│    • documents table: metadata + semantic markdown               │
-│    • document_chunks table: chunks + VECTOR(768) embeddings      │
-│    • Auto-create vector index for similarity search              │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph INGESTION["📄 DOCUMENT INGESTION PIPELINE"]
+        A1[USER UPLOADS DOCUMENT] --> A2[routes/library/new.tsx<br/>Handle File Upload<br/>Accept: .pdf, .txt, .md, .js, .py, etc.<br/>Validate file size and type]
+        A2 --> A3[lib/document.server.ts<br/>Convert to Semantic Markdown<br/>PDF → pdf2md extraction<br/>Plain text → Heuristic heading detection<br/>Code/Markdown → Direct storage]
+        A3 --> A4[lib/document.server.ts<br/>Chunk with Hierarchy<br/>chunkMarkdown: Respect headings, track hierarchy<br/>chunkText: Sentence-based with 50 char overlap<br/>chunkCode: Preserve function/class boundaries<br/>Max 300 chars per chunk]
+        A4 --> A5[lib/document.server.ts<br/>Generate Embeddings Parallel<br/>Batch size: 10 concurrent requests<br/>Model: nomic-embed-text:latest 768 dims<br/>LRU cache: 500 max, 15-min TTL<br/>5-10x faster than sequential]
+        A5 --> A6[schema/documents.sql<br/>Store in MariaDB<br/>documents table: metadata + semantic markdown<br/>document_chunks table: chunks + VECTOR 768<br/>Auto-create vector index]
+    end
 
-═══════════════════════════════════════════════════════════════════
+    subgraph RETRIEVAL["🔍 RAG RETRIEVAL PIPELINE"]
+        B1[USER ASKS QUESTION] --> B2[routes/chats/detail.tsx<br/>Calculate Dynamic Chunk Limit<br/>availableTokens = 16384 * 0.7 - system - history - msg<br/>chunkLimit = max 3, min 10]
+        B2 --> B3[lib/document.server.ts<br/>Build Weighted Query<br/>Current message x2 weight<br/>+ Last 3 user messages<br/>Limit to ~500 words]
+        B3 --> B4[lib/document.server.ts<br/>Generate Query Embedding<br/>Check LRU cache first 40-140x faster if hit<br/>POST to Ollama /api/embed<br/>Returns 768-dimensional vector]
+        B4 --> B5[lib/document.server.ts<br/>Vector Similarity Search<br/>VEC_DISTANCE_COSINE chunkEmbedding, queryVec<br/>Filter: documentUUID IN selected docs<br/>Order: similarity DESC<br/>Limit: dynamicChunkLimit 3-10]
+        B5 --> B6[lib/document.server.ts<br/>Filter by Similarity Threshold<br/>Reject chunks with similarity < 0.3<br/>Return empty context if no relevant chunks]
+        B6 --> B7[lib/document.server.ts<br/>Format RAG Context<br/>Markdown format with metadata<br/>Include: page, section, hierarchy, relevance %<br/>Add citation instructions for LLM]
+    end
 
-┌──────────────────────────────────────────────────────────────────┐
-│                      USER ASKS QUESTION                          │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [routes/chats/detail.tsx] Calculate Dynamic Chunk Limit        │
-│    • availableTokens = (16384 * 0.7) - system - history - msg    │
-│    • chunkLimit = max(3, min(10, floor(available / 500)))        │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/document.server.ts] Build Weighted Query                  │
-│    • Current message (x2 weight)                                 │
-│    • + Last 3 user messages                                      │
-│    • Limit to ~500 words                                         │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/document.server.ts] Generate Query Embedding              │
-│    • Check LRU cache first (40-140x faster if hit)               │
-│    • POST to Ollama /api/embed                                   │
-│    • Returns 768-dimensional vector                              │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/document.server.ts] Vector Similarity Search               │
-│    • Query: VEC_DISTANCE_COSINE(chunkEmbedding, queryVec)        │
-│    • Filter: documentUUID IN (selected docs)                     │
-│    • Order: similarity DESC                                      │
-│    • Limit: dynamicChunkLimit (3-10)                             │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/document.server.ts] Filter by Similarity Threshold         │
-│    • Reject chunks with similarity < 0.3 (30%)                   │
-│    • Return empty context if no relevant chunks                  │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/document.server.ts] Format RAG Context                    │
-│    • Markdown format with metadata                               │
-│    • Include: page #, section, hierarchy path, relevance %       │
-│    • Add instructions for LLM citation behaviour                 │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/chat.ts] Build Message Array                              │
-│    • System: prompt + RAG context (combined)                     │
-│    • History: recent messages (as many as fit in token budget)   │
-│    • User: current message                                       │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [hooks/useOllama.ts] Send to Ollama (Streaming)                │
-│    • POST to http://localhost:11434/api/chat                     │
-│    • stream: true (newline-delimited JSON)                       │
-│    • Read response chunks via ReadableStream                     │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [routes/chats/detail.tsx] Display Streaming Response           │
-│    • Buffer incomplete words for clean display                   │
-│    • Update UI progressively as tokens arrive                    │
-│    • Show typing indicator while streaming                       │
-└──────────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  [lib/chat.server.ts] Save Message Pair to Database             │
-│    • User message + assistant response                           │
-│    • Persist for conversation history                            │
-│    • Used for context in future queries                          │
-└──────────────────────────────────────────────────────────────────┘
+    subgraph GENERATION["💬 RESPONSE GENERATION PIPELINE"]
+        C1[lib/chat.ts<br/>Build Message Array<br/>System: prompt + RAG context combined<br/>History: recent messages in token budget<br/>User: current message]
+        C2[hooks/useOllama.ts<br/>Send to Ollama Streaming<br/>POST to localhost:11434/api/chat<br/>stream: true newline-delimited JSON<br/>Read response via ReadableStream]
+        C3[routes/chats/detail.tsx<br/>Display Streaming Response<br/>Buffer incomplete words for clean display<br/>Update UI progressively as tokens arrive<br/>Show typing indicator while streaming]
+        C4[lib/chat.server.ts<br/>Save Message Pair to Database<br/>User message + assistant response<br/>Persist for conversation history<br/>Used for context in future queries]
+    end
+
+    A6 -.->|Documents Available| B1
+    B7 --> C1
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+
+    style INGESTION fill:#2d3748,stroke:#4299e1,stroke-width:3px,color:#fff
+    style RETRIEVAL fill:#2d3748,stroke:#ed8936,stroke-width:3px,color:#fff
+    style GENERATION fill:#2d3748,stroke:#48bb78,stroke-width:3px,color:#fff
+    style A1 fill:#1a202c,stroke:#4299e1,stroke-width:2px,color:#fff
+    style B1 fill:#1a202c,stroke:#ed8936,stroke-width:2px,color:#fff
+    style C4 fill:#1a202c,stroke:#9f7aea,stroke-width:2px,color:#fff
 ```
 
 ---
