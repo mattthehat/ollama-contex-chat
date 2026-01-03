@@ -6,7 +6,6 @@ export type CustomModel = {
     modelUUID: string;
     modelName: string;
     modelDescription?: string;
-    modelIcon: string;
 
     // Ollama Configuration
     ollamaModel: string;
@@ -62,7 +61,6 @@ export type CustomModelWithDocuments = CustomModel & {
 export type CreateCustomModelData = {
     modelName: string;
     modelDescription?: string;
-    modelIcon?: string;
     ollamaModel: string;
     ollamaTemperature?: number;
     ollamaTopP?: number;
@@ -97,7 +95,6 @@ const MODEL_FIELDS = {
     modelUUID: 'modelUUID',
     modelName: 'modelName',
     modelDescription: 'modelDescription',
-    modelIcon: 'modelIcon',
     ollamaModel: 'ollamaModel',
     ollamaTemperature: 'ollamaTemperature',
     ollamaTopP: 'ollamaTopP',
@@ -236,7 +233,6 @@ export async function createCustomModel(
         modelUUID,
         modelName: data.modelName,
         modelDescription: data.modelDescription || null,
-        modelIcon: data.modelIcon || '🤖',
         ollamaModel: data.ollamaModel,
         ollamaTemperature: data.ollamaTemperature ?? 0.7,
         ollamaTopP: data.ollamaTopP ?? 0.9,
@@ -295,7 +291,6 @@ export async function updateCustomModel(
     if (data.modelName !== undefined) updateData.modelName = data.modelName;
     if (data.modelDescription !== undefined)
         updateData.modelDescription = data.modelDescription;
-    if (data.modelIcon !== undefined) updateData.modelIcon = data.modelIcon;
     if (data.ollamaModel !== undefined)
         updateData.ollamaModel = data.ollamaModel;
     if (data.ollamaTemperature !== undefined)

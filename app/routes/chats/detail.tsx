@@ -406,7 +406,7 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
                                     key={model.modelId}
                                     value={model.modelId}
                                 >
-                                    {model.modelIcon} {model.modelName}
+                                    {model.modelName}
                                 </option>
                             ))}
                         </select>

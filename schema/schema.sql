@@ -82,7 +82,6 @@ CREATE TABLE `custom_models` (
   `modelUUID` VARCHAR(36) NOT NULL,
   `modelName` VARCHAR(255) NOT NULL,
   `modelDescription` TEXT DEFAULT NULL,
-  `modelIcon` VARCHAR(10) DEFAULT '🤖',
 
   -- Ollama Configuration
   `ollamaModel` VARCHAR(100) NOT NULL DEFAULT 'llama3.2',
@@ -202,7 +201,6 @@ INSERT INTO `custom_models` (
   `modelUUID`,
   `modelName`,
   `modelDescription`,
-  `modelIcon`,
   `ollamaModel`,
   `systemPrompt`,
   `isDefault`
@@ -211,7 +209,6 @@ VALUES (
   UUID(),
   'Default Assistant',
   'A general-purpose AI assistant with document search capabilities',
-  '🤖',
   'llama3.2',
   'You are a helpful AI assistant with access to a library of documents. When answering questions, cite relevant information from the provided context when available.',
   TRUE

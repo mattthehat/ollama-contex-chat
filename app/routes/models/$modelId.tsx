@@ -55,7 +55,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     // Update logic
     const modelName = formData.get('modelName') as string;
     const modelDescription = formData.get('modelDescription') as string;
-    const modelIcon = formData.get('modelIcon') as string;
     const ollamaModel = formData.get('ollamaModel') as string;
     const systemPrompt = formData.get('systemPrompt') as string;
 
@@ -117,7 +116,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         await updateCustomModel(params.modelId, {
             modelName,
             modelDescription: modelDescription || undefined,
-            modelIcon: modelIcon || '🤖',
             ollamaModel,
             ollamaTemperature,
             ollamaTopP,
@@ -163,7 +161,6 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
         <div className="container mx-auto px-4 py-8 max-w-4xl">
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-bold flex items-center gap-3 dark:text-white">
-                    <span className="text-4xl">{model.modelIcon}</span>
                     {model.modelName}
                     {model.isDefault && (
                         <span className="text-sm bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded">
@@ -200,23 +197,6 @@ export default function ModelDetail({ loaderData }: Route.ComponentProps) {
                                     {actionData.errors.modelName}
                                 </p>
                             )}
-                        </div>
-
-                        <div>
-                            <label
-                                htmlFor="modelIcon"
-                                className="block text-sm font-medium mb-1 dark:text-gray-200"
-                            >
-                                Icon (Emoji)
-                            </label>
-                            <input
-                                type="text"
-                                id="modelIcon"
-                                name="modelIcon"
-                                defaultValue={model.modelIcon}
-                                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
-                                maxLength={10}
-                            />
                         </div>
 
                         <div>

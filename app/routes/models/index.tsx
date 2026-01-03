@@ -53,7 +53,6 @@ export default function ModelsIndex({ loaderData }: Route.ComponentProps) {
                             className="block bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 p-6"
                         >
                             <div className="flex items-start gap-4">
-                                <div className="text-4xl">{model.modelIcon}</div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-2">
                                         <h3 className="font-semibold text-lg truncate dark:text-white">

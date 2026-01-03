@@ -33,7 +33,6 @@ export const action = async ({ request }: Route.ActionArgs) => {
 
     const modelName = formData.get('modelName') as string;
     const modelDescription = formData.get('modelDescription') as string;
-    const modelIcon = formData.get('modelIcon') as string;
     const ollamaModel = formData.get('ollamaModel') as string;
     const systemPrompt = formData.get('systemPrompt') as string;
 
@@ -89,7 +88,6 @@ export const action = async ({ request }: Route.ActionArgs) => {
         const modelUUID = await createCustomModel({
             modelName,
             modelDescription: modelDescription || undefined,
-            modelIcon: modelIcon || '🤖',
             ollamaModel,
             ollamaTemperature,
             ollamaTopP,
@@ -153,22 +151,6 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                             {actionData?.errors?.modelName && (
                                 <p className="text-red-600 dark:text-red-400 text-sm mt-1">{actionData.errors.modelName}</p>
                             )}
-                        </div>
-
-                        <div>
-                            <label htmlFor="modelIcon" className="block text-sm font-medium mb-1 dark:text-gray-200">
-                                Icon (Emoji)
-                            </label>
-                            <input
-                                type="text"
-                                id="modelIcon"
-                                name="modelIcon"
-                                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
-                                placeholder="🤖"
-                                defaultValue="🤖"
-                                maxLength={10}
-                            />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">An emoji to visually represent this model (e.g., 💻 for coding, 📚 for research)</p>
                         </div>
 
                         <div>

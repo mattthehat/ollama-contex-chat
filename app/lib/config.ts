@@ -19,6 +19,10 @@ const config = {
             friendlyName: 'Gemma3 1B',
             modelName: 'gemma3:1b',
         },
+        {
+            friendlyName: 'Granite 3 Moe',
+            modelName: 'granite3.1-moe',
+        },
     ],
     embedModel: 'nomic-embed-text:latest',
 
