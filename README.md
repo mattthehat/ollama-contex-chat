@@ -186,41 +186,38 @@ graph TD
 This section explains the complete journey from when a user sends a message to receiving an AI response. Each stage is explained in detail with file references and timing information.
 
 ```mermaid
-graph TD
-    A[STAGE 1: USER INPUT<br/>User types message → Press Enter<br/>Time: <10ms] --> B[STAGE 2: LOAD CONFIGURATION<br/>Query database for model settings,<br/>RAG config, feature flags, documents<br/>Time: 5-15ms]
+graph TB
+    A[1. USER INPUT<br/>User submits message<br/>⏱️ <10ms] --> B[2. LOAD CONFIGURATION<br/>Query model settings & RAG config<br/>⏱️ 5-15ms]
 
-    B --> C[STAGE 3: LOAD CONVERSATION HISTORY<br/>Query last 10 messages from DB<br/>Format as message array<br/>Time: 3-8ms]
+    B --> C[3. LOAD CONVERSATION HISTORY<br/>Get last 10 messages<br/>⏱️ 3-8ms]
 
     C --> D{Documents<br/>Selected?}
 
-    D -->|Yes| E[STAGE 4: RAG PIPELINE]
-    D -->|No| J[STAGE 5: BUILD SYSTEM PROMPT]
+    D -->|Yes| E[4. RAG PIPELINE]
+    D -->|No| J
 
-    E --> F[STAGE 4a: GENERATE QUERY EMBEDDING<br/>Send to Ollama /api/embed<br/>Receive 768-dimensional vector<br/>Check LRU cache first<br/>Time: 50-150ms or <1ms cached]
+    E --> F[4a. Generate Query Embedding<br/>Ollama /api/embed<br/>⏱️ 50-150ms or <1ms cached]
+    F --> G[4b. Vector Similarity Search<br/>MariaDB VEC_DISTANCE_COSINE<br/>⏱️ 50-200ms]
+    G --> H[4c. Filter by Threshold<br/>Top N chunks<br/>⏱️ <1ms]
+    H --> I[4d. Format Context<br/>Add metadata & citations<br/>⏱️ 1-3ms]
 
-    F --> G[STAGE 4b: VECTOR SIMILARITY SEARCH<br/>Query MariaDB with VEC_DISTANCE_COSINE<br/>Compare against all chunk embeddings<br/>Calculate similarity scores 0.0-1.0<br/>Time: 50-200ms]
+    I --> J[5. BUILD SYSTEM PROMPT<br/>Combine prompt + context<br/>⏱️ <1ms]
 
-    G --> H[STAGE 4c: FILTER BY SIMILARITY<br/>Filter by threshold e.g. 0.3<br/>Take top N chunks e.g. 5<br/>Time: <1ms]
+    J --> K[6. CONSTRUCT MESSAGES<br/>OpenAI format array<br/>⏱️ <1ms]
 
-    H --> I[STAGE 4d: FORMAT CONTEXT<br/>Extract metadata page, section<br/>Format as markdown with citations<br/>Calculate avg similarity<br/>Time: 1-3ms]
+    K --> L[7. SEND TO OLLAMA<br/>POST /api/chat stream=true<br/>⏱️ 100-500ms]
 
-    I --> J[STAGE 5: BUILD SYSTEM PROMPT<br/>Combine: custom prompt +<br/>conversation summary +<br/>RAG context<br/>Time: <1ms]
+    L --> M[8. STREAM RESPONSE<br/>Server-Sent Events<br/>⏱️ 2.5-7s for 200 tokens]
 
-    J --> K[STAGE 6: CONSTRUCT MESSAGES<br/>Build OpenAI-compatible format:<br/>system, user, assistant array<br/>Time: <1ms]
+    M --> N[9. DISPLAY IN UI<br/>Real-time typewriter effect<br/>⏱️ Real-time]
 
-    K --> L[STAGE 7: SEND TO OLLAMA API<br/>POST /api/chat with messages,<br/>model name, parameters,<br/>stream: true<br/>Time: 100-500ms to first token]
+    N --> O[10. ADD CITATIONS<br/>Append sources<br/>⏱️ <1ms]
 
-    L --> M[STAGE 8: STREAM RESPONSE TOKENS<br/>Ollama sends Server-Sent Events<br/>Each token arrives sequentially<br/>Speed: 30-80 tok/s small,<br/>10-30 tok/s medium<br/>Time: 2.5-7s for 200 tokens]
+    O --> P[11. SAVE TO DATABASE<br/>INSERT messages<br/>⏱️ 5-15ms]
 
-    M --> N[STAGE 9: DISPLAY IN UI<br/>React receives tokens in real-time<br/>Appends to response text<br/>Typewriter-style output<br/>Time: Real-time, no delay]
+    P --> Q[12. UPDATE UI<br/>Revalidate & refresh<br/>⏱️ 10-30ms]
 
-    N --> O[STAGE 10: ADD CITATIONS<br/>If enabled, append formatted sources:<br/>1 Doc.pdf - Page 12<br/>2 Doc.pdf - Page 13<br/>Time: <1ms]
-
-    O --> P[STAGE 11: SAVE TO DATABASE<br/>INSERT user message<br/>INSERT assistant response<br/>Single transaction<br/>Time: 5-15ms]
-
-    P --> Q[STAGE 12: UPDATE CHAT HISTORY<br/>React Router revalidates loader<br/>Re-fetch from database<br/>UI updates conversation<br/>Time: 10-30ms]
-
-    Q --> R[COMPLETE<br/>Total: ~8 seconds<br/>for 200 token response]
+    Q --> R[✅ COMPLETE<br/>Total: ~8 seconds]
 
     style A fill:#2d3748,stroke:#4299e1,stroke-width:3px,color:#fff
     style E fill:#2d3748,stroke:#ed8936,stroke-width:3px,color:#fff
