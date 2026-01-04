@@ -36,15 +36,24 @@ A modern, production-ready RAG (Retrieval-Augmented Generation) application buil
     - [Markdown-First Approach](#markdown-first-approach)
     - [Chunk Metadata](#chunk-metadata)
 11. [Performance Optimisations](#performance-optimisations)
-12. [Integration with Ollama](#integration-with-ollama)
+12. [Intelligent RAG Features](#intelligent-rag-features)
+13. [Agent Mode (ReAct)](#agent-mode-react)
+    - [What is ReAct?](#what-is-react)
+    - [Automatic Complexity Detection](#automatic-complexity-detection)
+    - [Agent Configuration](#agent-configuration)
+    - [Available Tools](#available-tools)
+    - [Usage Examples](#usage-examples)
+    - [Performance Considerations](#performance-considerations-1)
+    - [Monitoring and Debugging](#monitoring-and-debugging)
+14. [Integration with Ollama](#integration-with-ollama)
     - [Configuration](#configuration)
     - [Streaming Chat API](#streaming-chat-api)
-13. [Vector Indexing & Search](#vector-indexing--search)
-14. [Data Flow Diagram](#data-flow-diagram)
-15. [Key Files & Responsibilities](#key-files--responsibilities)
-16. [Deployment](#deployment)
-17. [Technical Stack](#technical-stack)
-18. [Future Enhancements](#future-enhancements)
+15. [Vector Indexing & Search](#vector-indexing--search)
+16. [Data Flow Diagram](#data-flow-diagram)
+17. [Key Files & Responsibilities](#key-files--responsibilities)
+18. [Deployment](#deployment)
+19. [Technical Stack](#technical-stack)
+20. [Future Enhancements](#future-enhancements)
 
 ---
 
@@ -66,6 +75,7 @@ The application runs entirely locally with no external API dependencies, ensurin
 
 - **Advanced RAG Implementation** - Semantic chunking with heading hierarchy preservation
 - **Intelligent RAG System** - HyDE, query decomposition, context compression, and entity tracking
+- **Agent Mode (ReAct)** - Multi-step reasoning with automatic complexity detection and tool use
 - **Professional Citations** - Inline source citations with page numbers and confidence scoring
 - **Custom Model CMS** - Create and manage AI models with fine-tuned configurations
 - **Document Library** - Upload PDFs, text files, markdown, and code
@@ -1702,6 +1712,227 @@ Intelligent RAG features are configured per-model via the Custom Model CMS:
 - Other features add minimal latency (<50ms total)
 
 For best performance on slower hardware, disable HyDE and Query Decomposition. The quality improvement is most noticeable for complex, conceptual queries.
+
+---
+
+## Agent Mode (ReAct)
+
+Agent Mode adds ReAct (Reasoning + Acting) pattern capabilities, enabling the system to handle complex queries through multi-step reasoning and tool use.
+
+### What is ReAct?
+
+ReAct is an AI reasoning pattern that combines:
+- **Reasoning**: The agent thinks about what to do next
+- **Acting**: The agent executes tools to gather information
+- **Observing**: The agent processes tool results
+
+The agent iterates through this cycle until it has enough information to provide a final answer.
+
+### Automatic Complexity Detection
+
+The system automatically detects query complexity based on indicators such as:
+- Multiple questions in one query
+- Requests for analysis, comparison, or investigation
+- Multi-step procedural questions
+- Queries requiring document synthesis
+- Complex "how" + "why" combinations
+
+**Complexity levels**:
+- **LOW**: Simple factual questions, greetings
+- **MEDIUM**: Multi-part questions, comparisons, explanations
+- **HIGH**: Complex reasoning, investigations, multi-step procedures
+
+### Agent Configuration
+
+Each custom model can be configured with:
+
+| Setting | Values | Description |
+|---------|--------|-------------|
+| `agentMode` | `disabled`, `auto`, `forced` | When to use agent mode |
+| `agentMaxIterations` | 1-10 (default: 5) | Maximum reasoning loops |
+| `agentShowReasoning` | `true`/`false` | Display reasoning steps to user |
+| `agentTemperature` | 0.0-1.0 (default: 0.7) | Creativity for agent reasoning |
+| `agentComplexityThreshold` | `low`, `medium`, `high` | Minimum complexity to trigger auto mode |
+
+### Available Tools
+
+The agent has access to 7 tools:
+
+1. **search_documents** - Search across all documents using semantic similarity
+2. **search_selected_documents** - Search within specific user-selected documents
+3. **get_document_metadata** - Retrieve document information
+4. **list_documents** - List available documents in library
+5. **decompose_query** - Break complex questions into sub-questions
+6. **extract_entities** - Extract key topics and concepts from text
+7. **classify_query** - Determine query type (factual, comparative, procedural, etc.)
+
+### Usage Examples
+
+**Investigation Tasks**:
+```
+"Investigate the safeguarding procedures for handling online bullying incidents
+and identify all required documentation."
+```
+
+**Multi-Step Analysis**:
+```
+"First, identify the key responsibilities of a DSL according to KCSIE.
+Then, compare these with the DDSL role and explain when delegation is appropriate."
+```
+
+**Document Synthesis**:
+```
+"Based on our safeguarding policy, what are the complete steps a teacher
+should take when a student discloses self-harm? Include timelines and
+all required contacts."
+```
+
+**Comparative Questions**:
+```
+"Compare the approach to handling peer-on-peer abuse vs adult-to-child concerns.
+What are the key procedural differences?"
+```
+
+### Configuration Examples
+
+**Enable agent mode with auto-detection** (recommended):
+```sql
+UPDATE custom_models SET
+    agentMode = 'auto',
+    agentMaxIterations = 5,
+    agentShowReasoning = TRUE,
+    agentTemperature = 0.7,
+    agentComplexityThreshold = 'medium'
+WHERE modelName = 'Safeguarding Assistant';
+```
+
+**Force agent mode for all queries**:
+```sql
+UPDATE custom_models
+SET agentMode = 'forced'
+WHERE modelName = 'Advanced Research Assistant';
+```
+
+**Disable agent mode completely**:
+```sql
+UPDATE custom_models
+SET agentMode = 'disabled'
+WHERE modelName = 'Simple Q&A Assistant';
+```
+
+### Performance Considerations
+
+**Agent Mode Performance**:
+- **Typical iterations**: 2-4 loops for most queries
+- **Average processing time**: 5-15 seconds (depending on tool usage)
+- **Tool overhead**: Each tool call adds 50-500ms
+
+**Optimisation Tips**:
+
+1. **Set appropriate max iterations**:
+   - Simple tasks: 3 iterations
+   - Complex tasks: 5-7 iterations
+   - Investigation tasks: Up to 10 iterations
+
+2. **Use complexity threshold wisely**:
+   - `low`: Agent activates very frequently (may be excessive)
+   - `medium`: Balanced (recommended)
+   - `high`: Only most complex queries
+
+3. **Model selection**:
+   - Smaller models (7B): Faster but less capable reasoning
+   - Larger models (70B+): Better reasoning but slower
+   - Recommended: llama3.2 (8B) or deepseek-r1:1.5b for reasoning
+
+### Monitoring and Debugging
+
+**View recent agent interactions**:
+```sql
+SELECT
+    m.messageId,
+    m.messageUser,
+    m.agentComplexity,
+    m.agentIterations,
+    JSON_LENGTH(m.agentSteps) as step_count,
+    m.agentToolsUsed
+FROM messages m
+WHERE m.messageType = 'agent'
+ORDER BY m.messageCreated DESC
+LIMIT 10;
+```
+
+**Detailed agent steps audit**:
+```sql
+SELECT
+    s.stepNumber,
+    s.stepType,
+    s.toolName,
+    s.stepDurationMs,
+    LEFT(s.stepContent, 100) as content_preview
+FROM agent_steps s
+WHERE s.messageId = 123
+ORDER BY s.stepNumber;
+```
+
+### Architecture
+
+**File Structure**:
+```
+app/
+├── lib/
+│   └── agent/
+│       ├── complexity.ts          # Query complexity detection
+│       ├── tools.server.ts         # Agent tool definitions and executors
+│       └── react.server.ts         # ReAct agent orchestrator
+├── components/
+│   └── AgentReasoning.tsx         # UI component for reasoning display
+└── routes/
+    └── chats/
+        └── detail.tsx              # Integration point
+
+schema/
+└── migrations/
+    └── 001_add_agent_mode.sql     # Database schema extensions
+```
+
+**Data Flow**:
+
+```mermaid
+graph TD
+    A[User Query] --> B[Complexity Detection]
+    B --> C{Should Use Agent?}
+    C -->|No| D[Standard RAG]
+    C -->|Yes| E[ReAct Agent]
+    E --> F[THOUGHT: Reason]
+    F --> G[ACTION: Execute Tool]
+    G --> H[OBSERVATION: Process Result]
+    H --> I{Need More Info?}
+    I -->|Yes| F
+    I -->|No| J[FINAL ANSWER]
+    D --> K[Stream Response]
+    J --> K
+    K --> L[Save to DB]
+    L --> M[Display in UI]
+```
+
+### Common Issues and Solutions
+
+**Issue**: Agent doesn't activate for complex queries
+- **Solution**: Check `agentMode` is set to `auto` or `forced`
+- **Solution**: Lower `agentComplexityThreshold` to `medium` or `low`
+
+**Issue**: Agent takes too long
+- **Solution**: Reduce `agentMaxIterations`
+- **Solution**: Use smaller/faster model for agent reasoning
+
+**Issue**: Agent provides incomplete answers
+- **Solution**: Increase `agentMaxIterations`
+- **Solution**: Review tool availability and ensure documents are properly indexed
+
+**Issue**: Agent doesn't find relevant information
+- **Solution**: Check document embeddings are generated
+- **Solution**: Review RAG similarity threshold
+- **Solution**: Verify documents are associated with the model
 
 ---
 

@@ -35,6 +35,13 @@ export type CustomModel = {
     ragAddFollowUpSuggestions: boolean;
     ragAddSmartDisclaimers: boolean;
 
+    // Agent Configuration
+    agentMode: 'disabled' | 'auto' | 'forced';
+    agentMaxIterations: number;
+    agentShowReasoning: boolean;
+    agentTemperature: number;
+    agentComplexityThreshold: 'low' | 'medium' | 'high';
+
     // System Prompt
     systemPrompt: string;
 
@@ -83,6 +90,11 @@ export type CreateCustomModelData = {
     ragAddExecutiveSummary?: boolean;
     ragAddFollowUpSuggestions?: boolean;
     ragAddSmartDisclaimers?: boolean;
+    agentMode?: 'disabled' | 'auto' | 'forced';
+    agentMaxIterations?: number;
+    agentTemperature?: number;
+    agentComplexityThreshold?: 'low' | 'medium' | 'high';
+    agentShowReasoning?: boolean;
     systemPrompt: string;
     maxContextTokens?: number;
     maxOutputTokens?: number;
@@ -117,6 +129,11 @@ const MODEL_FIELDS = {
     ragAddExecutiveSummary: 'ragAddExecutiveSummary',
     ragAddFollowUpSuggestions: 'ragAddFollowUpSuggestions',
     ragAddSmartDisclaimers: 'ragAddSmartDisclaimers',
+    agentMode: 'agentMode',
+    agentMaxIterations: 'agentMaxIterations',
+    agentShowReasoning: 'agentShowReasoning',
+    agentTemperature: 'agentTemperature',
+    agentComplexityThreshold: 'agentComplexityThreshold',
     systemPrompt: 'systemPrompt',
     maxContextTokens: 'maxContextTokens',
     maxOutputTokens: 'maxOutputTokens',
@@ -255,6 +272,11 @@ export async function createCustomModel(
         ragAddExecutiveSummary: data.ragAddExecutiveSummary ?? false,
         ragAddFollowUpSuggestions: data.ragAddFollowUpSuggestions ?? true,
         ragAddSmartDisclaimers: data.ragAddSmartDisclaimers ?? true,
+        agentMode: data.agentMode ?? 'auto',
+        agentMaxIterations: data.agentMaxIterations ?? 5,
+        agentTemperature: data.agentTemperature ?? 0.7,
+        agentComplexityThreshold: data.agentComplexityThreshold ?? 'medium',
+        agentShowReasoning: data.agentShowReasoning ?? true,
         systemPrompt: data.systemPrompt,
         maxContextTokens: data.maxContextTokens ?? 16384,
         maxOutputTokens: data.maxOutputTokens ?? 4096,
@@ -332,6 +354,16 @@ export async function updateCustomModel(
         updateData.ragAddFollowUpSuggestions = data.ragAddFollowUpSuggestions;
     if (data.ragAddSmartDisclaimers !== undefined)
         updateData.ragAddSmartDisclaimers = data.ragAddSmartDisclaimers;
+    if (data.agentMode !== undefined)
+        updateData.agentMode = data.agentMode;
+    if (data.agentMaxIterations !== undefined)
+        updateData.agentMaxIterations = data.agentMaxIterations;
+    if (data.agentTemperature !== undefined)
+        updateData.agentTemperature = data.agentTemperature;
+    if (data.agentComplexityThreshold !== undefined)
+        updateData.agentComplexityThreshold = data.agentComplexityThreshold;
+    if (data.agentShowReasoning !== undefined)
+        updateData.agentShowReasoning = data.agentShowReasoning;
     if (data.systemPrompt !== undefined)
         updateData.systemPrompt = data.systemPrompt;
     if (data.maxContextTokens !== undefined)

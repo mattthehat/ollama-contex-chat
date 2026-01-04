@@ -111,6 +111,13 @@ CREATE TABLE `custom_models` (
   `ragAddFollowUpSuggestions` BOOLEAN DEFAULT TRUE COMMENT 'Suggest follow-up questions',
   `ragAddSmartDisclaimers` BOOLEAN DEFAULT TRUE COMMENT 'Add context-aware disclaimers',
 
+  -- Agent Configuration
+  `agentMode` ENUM('disabled', 'auto', 'forced') DEFAULT 'auto' COMMENT 'Agent mode: disabled, auto-detect, or always use agent',
+  `agentMaxIterations` INT DEFAULT 5 COMMENT 'Maximum ReAct loop iterations',
+  `agentShowReasoning` BOOLEAN DEFAULT TRUE COMMENT 'Display reasoning steps to user',
+  `agentTemperature` DECIMAL(3,2) DEFAULT 0.7 COMMENT 'Temperature for agent reasoning (0.0-1.0)',
+  `agentComplexityThreshold` ENUM('low', 'medium', 'high') DEFAULT 'medium' COMMENT 'Minimum complexity to trigger agent mode',
+
   -- System Prompt
   `systemPrompt` TEXT NOT NULL DEFAULT 'You are a helpful AI assistant.',
 
@@ -186,10 +193,48 @@ CREATE TABLE `messages` (
   `messageUser` text DEFAULT NULL,
   `messageCreated` timestamp NULL DEFAULT current_timestamp(),
   `messagesystem` longtext DEFAULT NULL,
+
+  -- Agent Mode Metadata
+  `messageType` ENUM('standard', 'agent') DEFAULT 'standard' COMMENT 'Message type: standard or agent-generated',
+  `agentSteps` JSON DEFAULT NULL COMMENT 'Array of ReAct steps: thought, action, observation',
+  `agentToolsUsed` JSON DEFAULT NULL COMMENT 'List of tools used by agent',
+  `agentIterations` INT DEFAULT NULL COMMENT 'Number of ReAct iterations performed',
+  `agentComplexity` ENUM('low', 'medium', 'high') DEFAULT NULL COMMENT 'Detected query complexity',
+  `agentMetadata` JSON DEFAULT NULL COMMENT 'Additional agent metadata',
+
   PRIMARY KEY (`messageId`),
   KEY `idx_chat` (`messageChat`),
   KEY `idx_created` (`messageCreated`),
+  KEY `idx_message_type` (`messageType`),
+  KEY `idx_agent_complexity` (`agentComplexity`),
   CONSTRAINT `fk_message_chat` FOREIGN KEY (`messageChat`) REFERENCES `chats` (`chatId`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- AGENT_STEPS TABLE
+-- ============================================================================
+-- Detailed audit trail of agent reasoning steps
+
+DROP TABLE IF EXISTS `agent_steps`;
+CREATE TABLE `agent_steps` (
+  `stepId` INT(11) NOT NULL AUTO_INCREMENT,
+  `stepUUID` VARCHAR(36) NOT NULL,
+  `messageId` INT(11) NOT NULL,
+  `stepNumber` INT NOT NULL,
+  `stepType` ENUM('thought', 'action', 'observation', 'final_answer') NOT NULL,
+  `stepContent` TEXT NOT NULL,
+  `toolName` VARCHAR(100) DEFAULT NULL COMMENT 'Tool used in action step',
+  `toolInput` JSON DEFAULT NULL COMMENT 'Tool input parameters',
+  `toolOutput` TEXT DEFAULT NULL COMMENT 'Tool execution result',
+  `stepTimestamp` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `stepDurationMs` INT DEFAULT NULL COMMENT 'Step execution time in milliseconds',
+  PRIMARY KEY (`stepId`),
+  UNIQUE KEY `stepUUID` (`stepUUID`),
+  KEY `idx_message` (`messageId`),
+  KEY `idx_step_number` (`stepNumber`),
+  KEY `idx_step_type` (`stepType`),
+  KEY `idx_timestamp` (`stepTimestamp`),
+  CONSTRAINT `fk_agent_step_message` FOREIGN KEY (`messageId`) REFERENCES `messages` (`messageId`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
