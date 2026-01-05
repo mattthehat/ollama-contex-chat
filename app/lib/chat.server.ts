@@ -1,6 +1,11 @@
 import { db } from './db.server';
 import type { Message } from './chat';
 
+/**
+ * Get chat messages for display in UI
+ * Note: This loads 50 messages for UI display, but buildMessagesForOllama
+ * will only send the last 20 to Ollama for performance optimization
+ */
 export async function getChatMessages(chatId: string): Promise<Message[]> {
     const dbMessages = await db.getData<{
         user: string;
@@ -22,17 +27,19 @@ export async function getChatMessages(chatId: string): Promise<Message[]> {
                 },
             ],
             orderBy: ['messages.messageCreated'],
-            orderDirection: 'ASC',
-            limit: 100,
+            orderDirection: 'DESC', // Get most recent first
+            limit: 50, // Show last 50 messages in UI for user context
         },
         [chatId || '']
     );
 
-    // Map database results to Message type
-    const messages: Message[] = dbMessages.rows.flatMap((row) => [
-        { role: 'user' as const, content: row.user },
-        { role: 'assistant' as const, content: row.assistant },
-    ]);
+    // Map database results to Message type and reverse to chronological order
+    const messages: Message[] = dbMessages.rows
+        .flatMap((row) => [
+            { role: 'user' as const, content: row.user },
+            { role: 'assistant' as const, content: row.assistant },
+        ])
+        .reverse(); // Reverse to maintain chronological order (oldest to newest)
 
     return messages;
 }
