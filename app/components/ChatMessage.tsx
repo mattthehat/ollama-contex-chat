@@ -7,9 +7,11 @@ type Message = {
 
 type ChatMessageProps = {
     message: Message;
+    serverTime?: number;
+    ollamaTime?: number;
 };
 
-export default function ChatMessage({ message }: ChatMessageProps) {
+export default function ChatMessage({ message, serverTime, ollamaTime }: ChatMessageProps) {
     // Don't render empty messages
     if (!message.content || message.content.trim() === '') {
         return null;
@@ -26,10 +28,20 @@ export default function ChatMessage({ message }: ChatMessageProps) {
             }`}
         >
             {isUser ? (
-                <p className="text-gray-900 dark:text-gray-100">
-                    {message.content}
-                </p>
+                <>
+                    <p className="text-gray-900 dark:text-gray-100">
+                        {message.content}
+                    </p>
+                    {serverTime !== undefined && (
+                        <div className="mt-2 pt-2 border-t border-orange-200 dark:border-orange-700">
+                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                                Processed in {serverTime.toFixed(0)}ms
+                            </span>
+                        </div>
+                    )}
+                </>
             ) : (
+                <>
                 <div
                     className="
                         prose prose-sm dark:prose-invert max-w-none
@@ -55,6 +67,14 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                 >
                     <Markdown>{message.content}</Markdown>
                 </div>
+                {ollamaTime !== undefined && (
+                    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                            Generated in {ollamaTime.toFixed(0)}ms
+                        </span>
+                    </div>
+                )}
+                </>
             )}
         </div>
     );

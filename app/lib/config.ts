@@ -1,7 +1,9 @@
 const config = {
     // Ollama Configuration
     ollamaEndpoint: 'http://localhost:11434/api/chat',
-    maxContext: 16384,
+    // PERFORMANCE: Reduced from 16384 to 8192 for faster response times
+    // Most conversations don't need 16K context, and smaller context = faster processing
+    maxContext: 8192,
     chatModels: [
         {
             friendlyName: 'Gemma 3 8B',
@@ -22,6 +24,10 @@ const config = {
         {
             friendlyName: 'Granite 3 Moe',
             modelName: 'granite3.1-moe',
+        },
+        {
+            friendlyName: 'Granite 4 Micro',
+            modelName: 'granite4:micro',
         },
     ],
     embedModel: 'nomic-embed-text:latest',
@@ -65,8 +71,11 @@ const config = {
     // RAG Quality Settings
     rag: {
         minSimilarityThreshold: 0.3,
-        maxContextChunks: 5,
-        enableReranking: true,
+        // PERFORMANCE: Reduced from 5 to 3 chunks for faster processing
+        // 3 chunks is sufficient for most queries while significantly improving speed
+        maxContextChunks: 3,
+        // PERFORMANCE: Disabled reranking by default for speed (can be enabled per-model)
+        enableReranking: false,
         enableHybridSearch: true,
         enableCitations: true,
         enableConfidenceScoring: true,

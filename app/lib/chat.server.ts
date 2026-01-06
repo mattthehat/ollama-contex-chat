@@ -33,13 +33,14 @@ export async function getChatMessages(chatId: string): Promise<Message[]> {
         [chatId || '']
     );
 
-    // Map database results to Message type and reverse to chronological order
+    // Map database results to Message type in chronological order
+    // Fixed: Reverse rows first (to get oldest->newest), then flatMap to maintain user->assistant order
     const messages: Message[] = dbMessages.rows
+        .reverse() // Reverse rows to get chronological order (oldest to newest)
         .flatMap((row) => [
             { role: 'user' as const, content: row.user },
             { role: 'assistant' as const, content: row.assistant },
-        ])
-        .reverse(); // Reverse to maintain chronological order (oldest to newest)
+        ]);
 
     return messages;
 }

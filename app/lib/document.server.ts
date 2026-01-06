@@ -167,14 +167,19 @@ export type DocumentMetadata = {
  * Generate embeddings for text using Ollama with caching
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
+    const embeddingStart = performance.now();
+
     // Normalize text for cache key
     const cacheKey = text.trim().toLowerCase().slice(0, 1000); // Use first 1000 chars for key
 
     // Check cache first
     const cached = embeddingCache.get(cacheKey);
     if (cached) {
+        console.log(`    [EMBED] Cache hit (${(performance.now() - embeddingStart).toFixed(2)}ms)`);
         return cached;
     }
+
+    console.log(`    [EMBED] Cache miss, generating embedding for ${text.length} chars`);
 
     // Truncate text to max token limit for embedding model
     // nomic-embed-text has 2048 token limit (despite num_ctx=8192, model architecture is 2048)
@@ -270,6 +275,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     // Cache the result
     embeddingCache.set(cacheKey, embedding);
 
+    console.log(`    [EMBED] Generated embedding in ${(performance.now() - embeddingStart).toFixed(2)}ms`);
     return embedding;
 }
 
@@ -1111,16 +1117,23 @@ export async function searchChunksInDocuments(
     documentUUIDs: string[],
     limit: number = 5
 ): Promise<DocumentChunkWithSimilarity[]> {
+    const searchStart = performance.now();
+    console.log(`  [RAG] searchChunksInDocuments: Starting search for ${documentUUIDs.length} documents, limit=${limit}`);
+
     if (documentUUIDs.length === 0) {
         return [];
     }
 
+    const embeddingStart = performance.now();
     const queryEmbedding = await generateEmbedding(query);
+    console.log(`  [RAG] Embedding generation took ${(performance.now() - embeddingStart).toFixed(2)}ms`);
+
     const embeddingJson = JSON.stringify(queryEmbedding);
 
     // Create placeholders for document UUIDs
     const placeholders = documentUUIDs.map(() => '?').join(',');
 
+    const dbQueryStart = performance.now();
     const result = await db.rawQuery(
         `SELECT
             dc.chunkId,
@@ -1138,12 +1151,13 @@ export async function searchChunksInDocuments(
         LIMIT ?`,
         [embeddingJson, ...documentUUIDs, limit]
     );
+    console.log(`  [RAG] Database vector search took ${(performance.now() - dbQueryStart).toFixed(2)}ms`);
 
     const chunks = Array.isArray(result)
         ? result as DocumentChunkWithSimilarity[]
         : ((result as any)?.rows || []) as DocumentChunkWithSimilarity[];
 
-    // Vector search completed
+    console.log(`  [RAG] searchChunksInDocuments completed in ${(performance.now() - searchStart).toFixed(2)}ms, found ${chunks.length} chunks`);
 
     return chunks;
 }
@@ -1162,8 +1176,13 @@ export async function buildRAGContext(
     similarityThreshold: number = 0.3,
     useAdvanced: boolean = false
 ): Promise<string> {
+    const buildStart = performance.now();
+    console.log(`  [RAG] buildRAGContext: Starting (advanced=${useAdvanced})`);
+
     // Use advanced RAG if requested
     if (useAdvanced) {
+        console.log(`  [RAG] Using advanced RAG with multi-query, hybrid search, and reranking`);
+        const advancedStart = performance.now();
         const { buildAdvancedRAGContext } = await import('./rag-advanced.server');
         const result = await buildAdvancedRAGContext(
             currentMessage,
@@ -1175,11 +1194,14 @@ export async function buildRAGContext(
             true,  // useHybridSearch
             true   // useReranking
         );
+        console.log(`  [RAG] Advanced RAG completed in ${(performance.now() - advancedStart).toFixed(2)}ms`);
+        console.log(`  [RAG] buildRAGContext total: ${(performance.now() - buildStart).toFixed(2)}ms`);
         return result.context;
     }
 
     // Use standard RAG (existing implementation below)
     if (documentUUIDs.length === 0) {
+        console.log(`  [RAG] No documents provided, returning empty context`);
         return '';
     }
 
@@ -1198,20 +1220,23 @@ export async function buildRAGContext(
 
     // Limit query length to prevent overly long embeddings (max ~500 words)
     const trimmedQuery = contextualQuery.split(' ').slice(-500).join(' ');
+    console.log(`  [RAG] Query prepared (length: ${trimmedQuery.length} chars)`);
 
     const chunks = await searchChunksInDocuments(trimmedQuery, documentUUIDs, maxChunks);
 
     // Filter out chunks below similarity threshold to avoid irrelevant context
+    const filterStart = performance.now();
     const relevantChunks = chunks.filter(chunk => chunk.similarity > similarityThreshold);
+    console.log(`  [RAG] Filtering took ${(performance.now() - filterStart).toFixed(2)}ms, kept ${relevantChunks.length}/${chunks.length} chunks above threshold ${similarityThreshold}`);
 
     if (relevantChunks.length === 0) {
-        // No relevant chunks found for this query
+        console.log(`  [RAG] No relevant chunks found, returning empty context`);
+        console.log(`  [RAG] buildRAGContext total: ${(performance.now() - buildStart).toFixed(2)}ms`);
         return '';
     }
 
-    // RAG context built successfully
-
     // Format chunks with natural context (no chunk numbers or artificial instructions)
+    const formatStart = performance.now();
     const contextParts = relevantChunks.map((chunk) => {
         const metadata = typeof chunk.chunkMetadata === 'string'
             ? JSON.parse(chunk.chunkMetadata)
@@ -1225,6 +1250,8 @@ export async function buildRAGContext(
 
         return `${chunk.chunkContent}${sourceInfo}`;
     });
+    console.log(`  [RAG] Context formatting took ${(performance.now() - formatStart).toFixed(2)}ms`);
+    console.log(`  [RAG] buildRAGContext total: ${(performance.now() - buildStart).toFixed(2)}ms`);
 
     return `${contextParts.join('\n\n')}
 

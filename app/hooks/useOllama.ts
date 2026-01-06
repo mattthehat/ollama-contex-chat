@@ -32,6 +32,7 @@ export function useOllama() {
     const [response, setResponse] = useState<string>('');
     const [isStreaming, setIsStreaming] = useState(false);
     const [error, setError] = useState<string>('');
+    const [responseTime, setResponseTime] = useState<number>(0);
 
     const sendMessage = useCallback(
         async (
@@ -48,6 +49,8 @@ export function useOllama() {
             setIsStreaming(true);
             setResponse('');
             setError('');
+            setResponseTime(0);
+            const startTime = performance.now();
 
             const payload: any = {
                 model,
@@ -207,6 +210,9 @@ export function useOllama() {
                     rawAccumulated += buffer;
                     setResponse(americanToBritish(rawAccumulated));
                 }
+
+                // Record total response time
+                setResponseTime(performance.now() - startTime);
             } catch (err) {
                 setError(
                     err instanceof Error ? err.message : 'An error occurred'
@@ -222,12 +228,14 @@ export function useOllama() {
         setResponse('');
         setError('');
         setIsStreaming(false);
+        setResponseTime(0);
     }, []);
 
     return {
         response,
         isStreaming,
         error,
+        responseTime,
         sendMessage,
         reset,
     };
