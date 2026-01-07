@@ -1399,6 +1399,99 @@ Summary of optimisations implemented:
 | **Streaming Responses** | Real-time token streaming from Ollama | Better UX, perceived performance | [useOllama.ts](app/hooks/useOllama.ts) |
 | **MariaDB Vector Indexing** | Native vector similarity search | Fast retrieval at scale | [documents.sql](schema/documents.sql) |
 
+### Performance Logging & Monitoring
+
+The application includes comprehensive performance logging to identify bottlenecks and track response times across all operations.
+
+#### Features
+
+- **Detailed Timing Breakdowns**: Tracks model lookup, parallel operations, document conversion, token calculations, RAG processing, embedding generation, vector search, and system prompt protection
+- **Structured JSON Logs**: Easy to parse and analyze programmatically with tools like `jq`
+- **Console Summaries**: Quick performance overview in server console
+- **Chat Metadata**: Includes context about each request (chatId, model, document count, conversation length, RAG chunks found)
+- **UI Display**: User and assistant messages show processing/generation times
+
+#### Configuration
+
+Enable performance logging in your `.env` file:
+
+```bash
+# Performance Logging
+PERFORMANCE_LOGGING_ENABLED=true              # Enable/disable logging (default: true)
+PERFORMANCE_LOG_PATH=./logs/performance.log  # Log file location
+```
+
+#### Log Format
+
+Each entry is a JSON object with complete timing and metadata:
+
+```json
+{
+  "timestamp": "2026-01-07T10:30:45.123Z",
+  "chatId": "uuid-here",
+  "messagePreview": "What is machine learning...",
+  "modelName": "gemma3:latest",
+  "timings": {
+    "total": 125.34,
+    "modelLookup": 2.15,
+    "parallelOperations": 15.67,
+    "documentConversion": 3.45,
+    "tokenCalculations": 0.89,
+    "ragProcessing": 98.23,
+    "embeddingGeneration": 85.12,
+    "vectorSearch": 10.45,
+    "systemPromptProtection": 0.34
+  },
+  "metadata": {
+    "hasDocuments": true,
+    "documentCount": 3,
+    "useIntelligentRAG": false,
+    "conversationLength": 10,
+    "ragChunksFound": 5
+  }
+}
+```
+
+#### Analysis Examples
+
+**View real-time logs:**
+```bash
+tail -f logs/performance.log
+```
+
+**Find slow requests (>1s):**
+```bash
+cat logs/performance.log | jq 'select(.timings.total > 1000)'
+```
+
+**Average RAG processing time:**
+```bash
+cat logs/performance.log | jq -s 'map(.timings.ragProcessing // 0) | add/length'
+```
+
+**Embedding generation stats:**
+```bash
+cat logs/performance.log | jq -s 'map(.timings.embeddingGeneration // 0) | {avg: (add/length), max: max, min: min}'
+```
+
+#### Common Bottlenecks
+
+Based on timing data, typical bottlenecks include:
+
+1. **Embedding Generation (70-90ms)**: First-time embedding requests to Ollama
+   - **Solution**: Cache is automatic; subsequent requests <1ms
+
+2. **RAG Processing (80-150ms)**: When using RAG with documents
+   - **Solution**: Reduced `maxContextChunks` from 5→3 in config, disabled reranking by default
+
+3. **Vector Search (10-20ms)**: Database similarity search
+   - **Solution**: MariaDB native vector indexing provides optimal performance
+
+4. **Context Window (16K→8K)**: Reduced from 16,384 to 8,192 tokens for faster processing
+   - **Impact**: Most conversations don't need 16K context; smaller = faster
+
+See [performance-logger.server.ts](app/lib/performance-logger.server.ts) for implementation details.
+
 ### Conversation Context Management
 
 The application implements smart context management to maintain fast performance in long conversations while preserving conversation coherence:

@@ -11,6 +11,7 @@ import { buildMessagesForOllama, estimateTokenCount, calculateTotalTokens } from
 import { getAllDocuments, buildRAGContext } from '~/lib/document.server';
 import { getAllCustomModels, getCustomModelById } from '~/lib/models.server';
 import { detectPromptInjection, sanitizeRAGContext, protectSystemPrompt } from '~/lib/prompt-protection';
+import { createTimingTracker, logPerformance, type TimingTracker } from '~/lib/performance-logger.server';
 
 export const loader = async ({ params }: Route.LoaderArgs) => {
     const { chatId } = params;
@@ -49,7 +50,7 @@ type ActionData = {
 };
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
-    const startTime = performance.now();
+    const tracker = createTimingTracker();
     console.log('\n=== ACTION STARTED ===');
 
     const formData = await request.formData();
@@ -71,7 +72,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     // Handle initial message submission
     const message = formData.get('message') as string;
     const customModelId = formData.get('customModelId') as string;
-    console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Form data parsed`);
+    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Form data parsed`);
 
     if (!message?.trim()) {
         return {
@@ -90,9 +91,9 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     }
 
     // PERFORMANCE: Get the custom model configuration first (fast database lookup)
-    const modelLookupStart = performance.now();
+    tracker.modelLookupStart = performance.now();
     const customModel = await getCustomModelById(parseInt(customModelId));
-    console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Model lookup took ${(performance.now() - modelLookupStart).toFixed(2)}ms`);
+    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Model lookup took ${(tracker.modelLookupEnd! - tracker.modelLookupStart!).toFixed(2)}ms`);
     if (!customModel) {
         return {
             errors: { message: null, model: 'Model not found' },
@@ -115,7 +116,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         // Get conversation history for better RAG context
         chatId ? getChatMessages(chatId) : Promise.resolve([])
     ]);
-    console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Parallel operations took ${(performance.now() - parallelStart).toFixed(2)}ms`);
+    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Parallel operations took ${(performance.now() - parallelStart).toFixed(2)}ms`);
 
     if (injectionWarning) {
         return {
@@ -137,9 +138,9 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
             selectedDocs = allDocs
                 .filter(doc => documentIds.includes(doc.documentId))
                 .map(doc => doc.documentUUID);
-            console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Document UUID conversion took ${(performance.now() - docConversionStart).toFixed(2)}ms`);
+            console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Document UUID conversion took ${(performance.now() - docConversionStart).toFixed(2)}ms`);
         } else {
-            console.log(`[${(performance.now() - startTime).toFixed(2)}ms] No documents to process`);
+            console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] No documents to process`);
         }
 
         // Use model's context configuration
@@ -151,7 +152,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
         // PERFORMANCE: Calculate chunk limits efficiently
         const dynamicChunkLimit = Math.max(3, Math.min(customModel.ragMaxChunks, Math.floor(availableTokens / 500)));
-        console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Token calculations took ${(performance.now() - tokenCalcStart).toFixed(2)}ms`);
+        console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Token calculations took ${(performance.now() - tokenCalcStart).toFixed(2)}ms`);
 
         // Check if model has intelligent RAG enabled
         const useIntelligentRAG = customModel.ragUseHyDE ||
@@ -162,15 +163,16 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         let citations = '';
         let confidence: 'high' | 'medium' | 'low' = 'medium';
         let intelligentMetadata = null;
+        let ragChunksFound = 0;
 
         // PERFORMANCE: Only build RAG context if we have selected documents
         // This is the most expensive operation, so skip it entirely when not needed
         if (selectedDocs.length > 0) {
             const ragStart = performance.now();
-            console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Starting RAG processing with ${selectedDocs.length} documents`);
+            console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Starting RAG processing with ${selectedDocs.length} documents`);
 
             if (useIntelligentRAG) {
-                console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Using intelligent RAG`);
+                console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Using intelligent RAG`);
                 // Use intelligent RAG system
                 const { generateIntelligentResponse } = await import('~/lib/intelligent-chat.server');
 
@@ -188,7 +190,8 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                     citations = result.citations || '';
                     confidence = result.confidence;
                     intelligentMetadata = result.metadata;
-                    console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Intelligent RAG completed in ${(performance.now() - ragStart).toFixed(2)}ms`);
+                    ragChunksFound = intelligentMetadata?.chunksUsed || dynamicChunkLimit;
+                    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Intelligent RAG completed in ${(performance.now() - ragStart).toFixed(2)}ms`);
                 } catch (error) {
                     console.error('Intelligent RAG failed, falling back to basic RAG:', error);
                     // Fall back to basic RAG on error
@@ -202,10 +205,11 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                         customModel.useAdvancedRAG
                     );
                     ragContext = sanitizeRAGContext(rawRAGContext);
-                    console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Fallback RAG completed in ${(performance.now() - fallbackStart).toFixed(2)}ms`);
+                    ragChunksFound = dynamicChunkLimit;
+                    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Fallback RAG completed in ${(performance.now() - fallbackStart).toFixed(2)}ms`);
                 }
             } else {
-                console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Using basic RAG`);
+                console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Using basic RAG`);
                 // Use basic RAG (faster than intelligent RAG)
                 const rawRAGContext = await buildRAGContext(
                     message,
@@ -216,19 +220,32 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                     customModel.useAdvancedRAG
                 );
                 ragContext = sanitizeRAGContext(rawRAGContext);
-                console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Basic RAG completed in ${(performance.now() - ragStart).toFixed(2)}ms`);
+                ragChunksFound = dynamicChunkLimit;
+                console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Basic RAG completed in ${(performance.now() - ragStart).toFixed(2)}ms`);
             }
         } else {
-            console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Skipping RAG (no documents selected)`);
+            console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Skipping RAG (no documents selected)`);
         }
 
         // Protect system prompt against injection attempts
         const protectStart = performance.now();
         const protectedSystemPrompt = protectSystemPrompt(customModel.systemPrompt);
-        console.log(`[${(performance.now() - startTime).toFixed(2)}ms] System prompt protection took ${(performance.now() - protectStart).toFixed(2)}ms`);
+        console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] System prompt protection took ${(performance.now() - protectStart).toFixed(2)}ms`);
 
-        const totalTime = performance.now() - startTime;
+        const totalTime = performance.now() - tracker.startTime;
         console.log(`[${totalTime.toFixed(2)}ms] === ACTION COMPLETED (Total: ${totalTime.toFixed(2)}ms) ===\n`);
+
+        // Log performance data to file with metadata
+        logPerformance(tracker, {
+            chatId,
+            message,
+            modelName: customModel.ollamaModel,
+            hasDocuments: selectedDocs.length > 0,
+            documentCount: selectedDocs.length,
+            useIntelligentRAG,
+            conversationLength: conversationHistory.length,
+            ragChunksFound: ragChunksFound > 0 ? ragChunksFound : undefined,
+        });
 
         return {
             message,
