@@ -26,6 +26,7 @@ type ModelOptions = {
     top_k?: number;
     repeat_penalty?: number;
     seed?: number;
+    num_ctx?: number;
 };
 
 export function useOllama() {
@@ -87,6 +88,9 @@ export function useOllama() {
                 }
                 if (options.seed !== undefined && options.seed !== null) {
                     cleanOptions.seed = options.seed;
+                }
+                if (options.num_ctx !== undefined && options.num_ctx !== null) {
+                    cleanOptions.num_ctx = options.num_ctx;
                 }
 
                 if (Object.keys(cleanOptions).length > 0) {

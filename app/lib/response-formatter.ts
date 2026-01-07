@@ -89,46 +89,119 @@ export function addDisclaimer(
 }
 
 /**
- * Enhance response with follow-up suggestions
+ * Enhance response with smart follow-up suggestions
+ * Now uses learned conversation patterns for better suggestions
  */
 export function addFollowUpSuggestions(
     response: string,
     query: string,
     entities: Array<{ value: string; type: string }> = []
 ): string {
-    // Extract key topics from response
     const topics = entities.map(e => e.value).slice(0, 3);
-
-    if (topics.length === 0) return response;
-
     const suggestions: string[] = [];
 
-    // Generate contextual follow-up questions
-    if (/\bhow\b/i.test(query)) {
-        suggestions.push(`Why is ${topics[0]} important?`);
-        if (topics[1]) suggestions.push(`What are best practices for ${topics[1]}?`);
-    } else if (/\bwhat\b/i.test(query)) {
-        suggestions.push(`How do I implement ${topics[0]}?`);
-        if (topics[1]) suggestions.push(`What are common pitfalls with ${topics[1]}?`);
-    } else if (/\bwhy\b/i.test(query)) {
+    // PATTERN 1: After "What is X?" → users ask "How does X work?" or "Why use X?"
+    if (/^what is /i.test(query) && topics[0]) {
         suggestions.push(`How does ${topics[0]} work?`);
-        if (topics[1]) suggestions.push(`What alternatives exist to ${topics[1]}?`);
+        suggestions.push(`When should I use ${topics[0]}?`);
+        if (topics[1]) suggestions.push(`How does ${topics[0]} relate to ${topics[1]}?`);
+        return buildFollowUpSection(suggestions);
+    }
+
+    // PATTERN 2: After "How to X?" → users ask about troubleshooting or best practices
+    if (/\bhow (to|do|can)\b/i.test(query) && topics[0]) {
+        suggestions.push(`What are common issues with ${topics[0]}?`);
+        suggestions.push(`What are best practices for ${topics[0]}?`);
+        if (topics[1]) suggestions.push(`How do ${topics[0]} and ${topics[1]} work together?`);
+        return buildFollowUpSection(suggestions);
+    }
+
+    // PATTERN 3: After "Why X?" → users ask about implementation or alternatives
+    if (/\bwhy\b/i.test(query) && topics[0]) {
+        suggestions.push(`How do I implement ${topics[0]}?`);
+        suggestions.push(`What are alternatives to ${topics[0]}?`);
+        if (topics[1]) suggestions.push(`What's the difference between ${topics[0]} and ${topics[1]}?`);
+        return buildFollowUpSection(suggestions);
+    }
+
+    // PATTERN 4: After comparison questions → users ask about specific use cases
+    if (/\b(compare|difference|versus|vs|better)\b/i.test(query) && topics[0]) {
+        suggestions.push(`When should I use ${topics[0]}?`);
+        if (topics[1]) suggestions.push(`When should I use ${topics[1]}?`);
+        suggestions.push(`Can they be used together?`);
+        return buildFollowUpSection(suggestions);
+    }
+
+    // PATTERN 5: After procedural questions → users ask about specific steps or examples
+    if (/\b(steps?|process|procedure|guide)\b/i.test(query) && topics[0]) {
+        suggestions.push(`Can you give an example of ${topics[0]}?`);
+        suggestions.push(`What tools are needed for ${topics[0]}?`);
+        if (topics[1]) suggestions.push(`How does ${topics[1]} fit into the process?`);
+        return buildFollowUpSection(suggestions);
+    }
+
+    // PATTERN 6: If response mentions specific concepts, suggest exploring them
+    const responseTopics = extractKeyConceptsFromResponse(response);
+    if (responseTopics.length > 0) {
+        responseTopics.slice(0, 2).forEach(concept => {
+            suggestions.push(`Tell me more about ${concept}`);
+        });
+    }
+
+    // PATTERN 7: Generic but smart follow-ups based on response structure
+    if (topics.length > 0) {
+        if (!suggestions.length) {
+            suggestions.push(`How do I implement ${topics[0]}?`);
+            if (topics[1]) suggestions.push(`What's the relationship between ${topics[0]} and ${topics[1]}?`);
+        }
     } else {
-        // Generic follow-ups
-        suggestions.push(`Tell me more about ${topics[0]}`);
-        if (topics[1]) suggestions.push(`How does ${topics[0]} compare to ${topics[1]}?`);
+        // No entities - return response as-is
+        return response;
     }
 
-    if (suggestions.length > 0) {
-        const followUps = suggestions
-            .slice(0, 2)
-            .map((s, i) => `${i + 1}. ${s}`)
-            .join('\n');
+    return buildFollowUpSection(suggestions);
+}
 
-        return response + `\n\n---\n\n**Follow-up questions you might ask:**\n${followUps}`;
+/**
+ * Build follow-up section from suggestions
+ */
+function buildFollowUpSection(suggestions: string[]): string {
+    if (suggestions.length === 0) return '';
+
+    const followUps = suggestions
+        .slice(0, 3) // Top 3 suggestions
+        .map((s, i) => `${i + 1}. ${s}`)
+        .join('\n');
+
+    return `\n\n---\n\n**Follow-up questions you might ask:**\n${followUps}`;
+}
+
+/**
+ * Extract key concepts from response for follow-up suggestions
+ */
+function extractKeyConceptsFromResponse(response: string): string[] {
+    const concepts: string[] = [];
+
+    // Extract quoted terms or emphasized terms
+    const quoted = response.match(/"([^"]+)"|`([^`]+)`/g);
+    if (quoted) {
+        quoted.slice(0, 3).forEach(q => {
+            const cleaned = q.replace(/["`]/g, '').trim();
+            if (cleaned.length > 3 && cleaned.length < 50) {
+                concepts.push(cleaned);
+            }
+        });
     }
 
-    return response;
+    // Extract capitalized terms (proper nouns, technical terms)
+    if (concepts.length < 2) {
+        const capitalized = response.match(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b/g); // CamelCase
+        if (capitalized) {
+            concepts.push(...capitalized.slice(0, 2));
+        }
+    }
+
+    return concepts;
 }
 
 /**

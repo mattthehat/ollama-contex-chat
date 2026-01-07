@@ -9,7 +9,10 @@ import {
     extractEntities,
     validateAnswer,
 } from './intelligent-rag.server';
-import { buildEnhancedRAGContext, formatCitationsForDisplay } from './rag-enhanced.server';
+import {
+    buildEnhancedRAGContext,
+    formatCitationsForDisplay,
+} from './rag-enhanced.server';
 import { enhanceResponse } from './response-formatter';
 import { detectPromptInjection, sanitizeRAGContext } from './prompt-protection';
 import { getCircuitBreaker } from './circuit-breaker';
@@ -22,6 +25,8 @@ export interface IntelligentChatRequest {
     userRole?: string;
     useAdvancedRAG?: boolean;
     customSystemPrompt?: string;
+    modelId?: number;
+    chatId?: number;
 }
 
 export interface IntelligentChatResponse {
@@ -45,10 +50,27 @@ export async function generateIntelligentResponse(
     request: IntelligentChatRequest
 ): Promise<IntelligentChatResponse> {
     const startTime = Date.now();
-    const { message, documentUUIDs, conversationHistory, userRole, useAdvancedRAG, customSystemPrompt } = request;
+    const {
+        message,
+        documentUUIDs,
+        conversationHistory,
+        userRole,
+        useAdvancedRAG,
+        customSystemPrompt,
+        modelId,
+        chatId,
+    } = request;
+
+    console.log(
+        `  [INTELLIGENT-RAG] Starting (useAdvancedRAG=${useAdvancedRAG}, docs=${documentUUIDs.length})`
+    );
 
     // 1. Security: Check for prompt injection
+    const securityStart = Date.now();
     const injectionWarning = detectPromptInjection(message);
+    console.log(
+        `  [INTELLIGENT-RAG] Security check: ${Date.now() - securityStart}ms`
+    );
     if (injectionWarning) {
         return {
             answer: injectionWarning,
@@ -65,10 +87,21 @@ export async function generateIntelligentResponse(
     }
 
     // 2. Extract entities from conversation
-    const entities = extractEntities([...conversationHistory, { role: 'user', content: message }]);
+    const entitiesStart = Date.now();
+    const entities = extractEntities([
+        ...conversationHistory,
+        { role: 'user', content: message },
+    ]);
+    console.log(
+        `  [INTELLIGENT-RAG] Entity extraction: ${Date.now() - entitiesStart}ms`
+    );
 
     // 3. Build conversation summary
+    const summaryStart = Date.now();
     const conversationSummary = buildConversationSummary(conversationHistory);
+    console.log(
+        `  [INTELLIGENT-RAG] Conversation summary: ${Date.now() - summaryStart}ms`
+    );
 
     // 4. Retrieve context with intelligent RAG
     let ragResult;
@@ -77,27 +110,43 @@ export async function generateIntelligentResponse(
     if (useAdvancedRAG && documentUUIDs.length > 0) {
         // Use HyDE + multi-query retrieval
         usedHyDE = true;
+        const hydeStart = Date.now();
+        console.log(
+            `  [INTELLIGENT-RAG] Starting HyDE multi-query retrieval...`
+        );
         const chunks = await hybridMultiQueryRetrieval(
             message,
             documentUUIDs,
             conversationHistory,
             config.rag.maxContextChunks
         );
+        console.log(
+            `  [INTELLIGENT-RAG] HyDE multi-query: ${Date.now() - hydeStart}ms`
+        );
 
         // Build enhanced context with citations
+        const contextStart = Date.now();
         ragResult = await buildEnhancedRAGContext(
             message,
             documentUUIDs,
             config.rag.maxContextChunks,
             config.rag.minSimilarityThreshold
         );
+        console.log(
+            `  [INTELLIGENT-RAG] Enhanced context build: ${Date.now() - contextStart}ms`
+        );
     } else if (documentUUIDs.length > 0) {
         // Standard enhanced RAG
+        const ragStart = Date.now();
+        console.log(`  [INTELLIGENT-RAG] Starting standard enhanced RAG...`);
         ragResult = await buildEnhancedRAGContext(
             message,
             documentUUIDs,
             config.rag.maxContextChunks,
             config.rag.minSimilarityThreshold
+        );
+        console.log(
+            `  [INTELLIGENT-RAG] Standard RAG: ${Date.now() - ragStart}ms`
         );
     } else {
         // No documents selected
@@ -116,16 +165,30 @@ export async function generateIntelligentResponse(
     }
 
     // 5. Sanitize RAG context
-    const sanitizedContext = config.security.enablePromptInjectionProtection
+    const sanitizeStart = Date.now();
+    let sanitizedContext = config.security.enablePromptInjectionProtection
         ? sanitizeRAGContext(ragResult.context)
         : ragResult.context;
+    console.log(
+        `  [INTELLIGENT-RAG] Context sanitization: ${Date.now() - sanitizeStart}ms`
+    );
 
     // 6. Build professional system prompt
+    const promptStart = Date.now();
     const systemPrompt = customSystemPrompt
         ? `${customSystemPrompt}\n\n${conversationSummary ? `Conversation context: ${conversationSummary}\n\n` : ''}${sanitizedContext}`
-        : buildProfessionalSystemPrompt(sanitizedContext, conversationSummary, userRole);
+        : buildProfessionalSystemPrompt(
+              sanitizedContext,
+              conversationSummary,
+              userRole
+          );
+    console.log(
+        `  [INTELLIGENT-RAG] System prompt build: ${Date.now() - promptStart}ms`
+    );
 
     // 7. Generate response with circuit breaker
+    const llmStart = Date.now();
+    console.log(`  [INTELLIGENT-RAG] Starting LLM call (non-streaming)...`);
     const breaker = getCircuitBreaker('ollama-chat', {
         failureThreshold: 3,
         successThreshold: 2,
@@ -135,8 +198,15 @@ export async function generateIntelligentResponse(
     let rawAnswer: string;
     try {
         rawAnswer = await breaker.execute(async () => {
-            return await callOllamaChat(systemPrompt, message, conversationHistory);
+            return await callOllamaChat(
+                systemPrompt,
+                message,
+                conversationHistory
+            );
         });
+        console.log(
+            `  [INTELLIGENT-RAG] LLM call completed: ${Date.now() - llmStart}ms`
+        );
     } catch (error) {
         console.error('Chat generation failed:', error);
         return {
@@ -154,9 +224,14 @@ export async function generateIntelligentResponse(
     }
 
     // 8. Validate answer
+    const validationStart = Date.now();
     const validation = validateAnswer(rawAnswer, sanitizedContext, message);
+    console.log(
+        `  [INTELLIGENT-RAG] Answer validation: ${Date.now() - validationStart}ms`
+    );
 
     // 9. Enhance response
+    const enhanceStart = Date.now();
     const enhanced = enhanceResponse(rawAnswer, {
         query: message,
         entities,
@@ -165,18 +240,29 @@ export async function generateIntelligentResponse(
         addFollowUps: entities.length > 0,
         addDisclaimer: true,
     });
+    console.log(
+        `  [INTELLIGENT-RAG] Response enhancement: ${Date.now() - enhanceStart}ms`
+    );
 
     // 10. Format citations
-    const citationText = ragResult.citations.length > 0
-        ? formatCitationsForDisplay(ragResult.citations)
-        : undefined;
+    const citationStart = Date.now();
+    const citationText =
+        ragResult.citations.length > 0
+            ? formatCitationsForDisplay(ragResult.citations)
+            : undefined;
+    console.log(
+        `  [INTELLIGENT-RAG] Citation formatting: ${Date.now() - citationStart}ms`
+    );
+
+    const totalTime = Date.now() - startTime;
+    console.log(`  [INTELLIGENT-RAG] TOTAL TIME: ${totalTime}ms\n`);
 
     return {
         answer: enhanced.content,
         citations: citationText,
         confidence: validation.confidence,
         metadata: {
-            processingTime: Date.now() - startTime,
+            processingTime: totalTime,
             chunksUsed: ragResult.metadata.chunks,
             avgSimilarity: ragResult.metadata.avgSimilarity,
             usedHyDE,
@@ -195,9 +281,10 @@ async function callOllamaChat(
     conversationHistory: Array<{ role: string; content: string }>
 ): Promise<string> {
     // Build message history
+    // Use more context for better conversation coherence
     const messages = [
         { role: 'system', content: systemPrompt },
-        ...conversationHistory.slice(-10), // Last 10 messages for context
+        ...conversationHistory.slice(-30), // Last 30 messages (15 exchanges) for better context
         { role: 'user', content: userMessage },
     ];
 
@@ -234,7 +321,14 @@ export async function* streamIntelligentResponse(
     request: IntelligentChatRequest
 ): AsyncGenerator<string, void, unknown> {
     const startTime = Date.now();
-    const { message, documentUUIDs, conversationHistory, userRole, useAdvancedRAG, customSystemPrompt } = request;
+    const {
+        message,
+        documentUUIDs,
+        conversationHistory,
+        userRole,
+        useAdvancedRAG,
+        customSystemPrompt,
+    } = request;
 
     // Security check
     const injectionWarning = detectPromptInjection(message);
@@ -244,7 +338,10 @@ export async function* streamIntelligentResponse(
     }
 
     // Build context (same as non-streaming)
-    const entities = extractEntities([...conversationHistory, { role: 'user', content: message }]);
+    const entities = extractEntities([
+        ...conversationHistory,
+        { role: 'user', content: message },
+    ]);
     const conversationSummary = buildConversationSummary(conversationHistory);
 
     let ragResult;
@@ -274,7 +371,12 @@ export async function* streamIntelligentResponse(
             citations: [],
             confidence: 'low' as const,
             confidenceScore: 0,
-            metadata: { chunks: 0, avgSimilarity: 0, time: 0, hasLowConfidence: true },
+            metadata: {
+                chunks: 0,
+                avgSimilarity: 0,
+                time: 0,
+                hasLowConfidence: true,
+            },
         };
     }
 
@@ -284,12 +386,17 @@ export async function* streamIntelligentResponse(
 
     const systemPrompt = customSystemPrompt
         ? `${customSystemPrompt}\n\n${conversationSummary ? `Conversation context: ${conversationSummary}\n\n` : ''}${sanitizedContext}`
-        : buildProfessionalSystemPrompt(sanitizedContext, conversationSummary, userRole);
+        : buildProfessionalSystemPrompt(
+              sanitizedContext,
+              conversationSummary,
+              userRole
+          );
 
     // Stream response
+    // Use more context for better conversation coherence
     const messages = [
         { role: 'system', content: systemPrompt },
-        ...conversationHistory.slice(-10),
+        ...conversationHistory.slice(-30), // Last 30 messages (15 exchanges) for better context
         { role: 'user', content: message },
     ];
 

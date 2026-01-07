@@ -101,6 +101,20 @@ export type CreateCustomModelData = {
     documentIds?: number[];
 };
 
+/**
+ * Parse JSON fields in a model object (placeholder for future use)
+ */
+function parseModelJsonFields(model: CustomModel | null): CustomModel | null {
+    return model;
+}
+
+/**
+ * Parse JSON fields for an array of models
+ */
+function parseModelsJsonFields(models: CustomModel[]): CustomModel[] {
+    return models.map((m) => parseModelJsonFields(m)!);
+}
+
 // Standard field mapping for all queries
 const MODEL_FIELDS = {
     modelId: 'modelId',
@@ -159,8 +173,8 @@ export async function getAllCustomModels(): Promise<CustomModel[]> {
         [true]
     );
 
-    // Sort to put default model first
-    return result.rows.sort((a, b) => {
+    // Parse JSON fields and sort to put default model first
+    return parseModelsJsonFields(result.rows).sort((a, b) => {
         if (a.isDefault && !b.isDefault) return -1;
         if (!a.isDefault && b.isDefault) return 1;
         return 0;
@@ -183,7 +197,7 @@ export async function getCustomModelByUUID(
         [uuid]
     );
 
-    return result || null;
+    return parseModelJsonFields(result);
 }
 
 /**
@@ -202,7 +216,7 @@ export async function getCustomModelById(
         [id]
     );
 
-    return result || null;
+    return parseModelJsonFields(result);
 }
 
 /**
@@ -334,8 +348,7 @@ export async function updateCustomModel(
         updateData.ragUseHybridSearch = data.ragUseHybridSearch;
     if (data.ragUseReranking !== undefined)
         updateData.ragUseReranking = data.ragUseReranking;
-    if (data.ragUseHyDE !== undefined)
-        updateData.ragUseHyDE = data.ragUseHyDE;
+    if (data.ragUseHyDE !== undefined) updateData.ragUseHyDE = data.ragUseHyDE;
     if (data.ragUseQueryDecomposition !== undefined)
         updateData.ragUseQueryDecomposition = data.ragUseQueryDecomposition;
     if (data.ragUseContextCompression !== undefined)
@@ -347,15 +360,15 @@ export async function updateCustomModel(
     if (data.ragEnableConfidenceScoring !== undefined)
         updateData.ragEnableConfidenceScoring = data.ragEnableConfidenceScoring;
     if (data.ragEnableResponseEnhancement !== undefined)
-        updateData.ragEnableResponseEnhancement = data.ragEnableResponseEnhancement;
+        updateData.ragEnableResponseEnhancement =
+            data.ragEnableResponseEnhancement;
     if (data.ragAddExecutiveSummary !== undefined)
         updateData.ragAddExecutiveSummary = data.ragAddExecutiveSummary;
     if (data.ragAddFollowUpSuggestions !== undefined)
         updateData.ragAddFollowUpSuggestions = data.ragAddFollowUpSuggestions;
     if (data.ragAddSmartDisclaimers !== undefined)
         updateData.ragAddSmartDisclaimers = data.ragAddSmartDisclaimers;
-    if (data.agentMode !== undefined)
-        updateData.agentMode = data.agentMode;
+    if (data.agentMode !== undefined) updateData.agentMode = data.agentMode;
     if (data.agentMaxIterations !== undefined)
         updateData.agentMaxIterations = data.agentMaxIterations;
     if (data.agentTemperature !== undefined)

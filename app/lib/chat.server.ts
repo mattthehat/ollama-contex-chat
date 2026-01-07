@@ -2,9 +2,9 @@ import { db } from './db.server';
 import type { Message } from './chat';
 
 /**
- * Get chat messages for display in UI
- * Note: This loads 50 messages for UI display, but buildMessagesForOllama
- * will only send the last 20 to Ollama for performance optimization
+ * Get chat messages for display in UI and context
+ * Note: This loads 100 messages to ensure good conversation context
+ * buildMessagesForOllama will use token-based limiting to fit within context window
  */
 export async function getChatMessages(chatId: string): Promise<Message[]> {
     const dbMessages = await db.getData<{
@@ -28,7 +28,7 @@ export async function getChatMessages(chatId: string): Promise<Message[]> {
             ],
             orderBy: ['messages.messageCreated'],
             orderDirection: 'DESC', // Get most recent first
-            limit: 50, // Show last 50 messages in UI for user context
+            limit: 100, // Load 100 messages (50 exchanges) for better context retention
         },
         [chatId || '']
     );

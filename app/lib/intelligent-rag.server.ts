@@ -17,6 +17,9 @@ export async function generateHypotheticalAnswer(
     query: string,
     conversationHistory: Array<{ role: string; content: string }> = []
 ): Promise<string> {
+    const hydeStart = performance.now();
+    console.log(`    [HyDE] Generating hypothetical answer for query...`);
+
     // Build context from recent conversation
     const recentContext = conversationHistory
         .slice(-3)
@@ -31,6 +34,7 @@ Answer (2-3 sentences):`;
 
     try {
         // Use Ollama to generate hypothetical answer
+        const llmStart = performance.now();
         const response = await fetch(config.ollamaEndpoint, {
             method: 'POST',
             headers: {
@@ -47,10 +51,14 @@ Answer (2-3 sentences):`;
             }),
         });
 
+        console.log(`    [HyDE] LLM call: ${(performance.now() - llmStart).toFixed(2)}ms`);
         const data = await response.json();
-        return data.response || query; // Fallback to original query
+        const result = data.response || query;
+        console.log(`    [HyDE] Total time: ${(performance.now() - hydeStart).toFixed(2)}ms`);
+        return result;
     } catch (error) {
         console.error('HyDE generation failed, using original query:', error);
+        console.log(`    [HyDE] Failed after ${(performance.now() - hydeStart).toFixed(2)}ms`);
         return query;
     }
 }
@@ -260,24 +268,35 @@ export async function hybridMultiQueryRetrieval(
     conversationHistory: Array<{ role: string; content: string }> = [],
     limit: number = 10
 ): Promise<DocumentChunkWithSimilarity[]> {
+    const multiQueryStart = performance.now();
+    console.log(`    [MULTI-QUERY] Starting hybrid multi-query retrieval`);
+
     if (documentUUIDs.length === 0) return [];
 
-    // 1. Generate HyDE answer
+    // 1. Generate HyDE answer (THIS IS THE BIGGEST BOTTLENECK - 5-15s)
+    const hydeStart = performance.now();
     const hypotheticalAnswer = await generateHypotheticalAnswer(
         query,
         conversationHistory
     );
+    console.log(`    [MULTI-QUERY] HyDE generation: ${(performance.now() - hydeStart).toFixed(2)}ms`);
 
-    // 2. Decompose query
+    // 2. Decompose query (fast, pattern-based)
+    const decomposeStart = performance.now();
     const subQueries = await decomposeQuery(query);
+    console.log(`    [MULTI-QUERY] Query decomposition: ${(performance.now() - decomposeStart).toFixed(2)}ms (${subQueries.length} queries)`);
 
-    // 3. Generate embeddings for all queries
+    // 3. Generate embeddings for all queries (parallel)
+    const embeddingStart = performance.now();
     const allQueries = [query, hypotheticalAnswer, ...subQueries];
+    console.log(`    [MULTI-QUERY] Generating ${allQueries.length} embeddings in parallel...`);
     const embeddings = await Promise.all(
         allQueries.map((q) => generateEmbedding(q))
     );
+    console.log(`    [MULTI-QUERY] Embedding generation: ${(performance.now() - embeddingStart).toFixed(2)}ms`);
 
-    // 4. Search with each embedding
+    // 4. Search with each embedding (sequential - could be parallelized)
+    const searchStart = performance.now();
     const placeholders = documentUUIDs.map(() => '?').join(',');
     const allResults: DocumentChunkWithSimilarity[][] = [];
 
@@ -307,14 +326,20 @@ export async function hybridMultiQueryRetrieval(
         ) as DocumentChunkWithSimilarity[];
         allResults.push(chunks);
     }
+    console.log(`    [MULTI-QUERY] Vector searches: ${(performance.now() - searchStart).toFixed(2)}ms (${embeddings.length} searches)`);
 
     // 5. Merge using RRF (Reciprocal Rank Fusion)
+    const rrfStart = performance.now();
     const { reciprocalRankFusion } = await import('./rag-advanced.server');
     const fusedResults = reciprocalRankFusion(allResults);
+    console.log(`    [MULTI-QUERY] RRF fusion: ${(performance.now() - rrfStart).toFixed(2)}ms`);
 
     // 6. Compress context
+    const compressStart = performance.now();
     const compressed = compressContext(fusedResults.slice(0, limit), query);
+    console.log(`    [MULTI-QUERY] Context compression: ${(performance.now() - compressStart).toFixed(2)}ms`);
 
+    console.log(`    [MULTI-QUERY] TOTAL: ${(performance.now() - multiQueryStart).toFixed(2)}ms\n`);
     return compressed;
 }
 

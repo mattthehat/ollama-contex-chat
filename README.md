@@ -4,56 +4,144 @@ A modern, production-ready RAG (Retrieval-Augmented Generation) application buil
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Features](#features)
-3. [Quick Start](#quick-start)
-   - [Prerequisites](#prerequisites)
-   - [Installation](#installation)
-   - [Development](#development)
-4. [RAG Architecture](#rag-architecture)
-   - [What is RAG?](#what-is-rag)
-   - [System Architecture Overview](#system-architecture-overview)
-5. [Document Storage & Indexing](#document-storage--indexing)
-   - [Database Schema](#database-schema)
-   - [Semantic Markdown Processing](#semantic-markdown-processing)
-   - [Chunking Strategy](#chunking-strategy)
-6. [Vector Embeddings](#vector-embeddings)
-   - [Embedding Generation](#embedding-generation)
-   - [Parallel Batch Processing](#parallel-batch-processing)
-   - [Embedding Cache](#embedding-cache)
-7. [Retrieval Mechanism](#retrieval-mechanism)
-   - [Similarity Search](#similarity-search)
-   - [Query Processing](#query-processing)
-   - [Similarity Threshold Filtering](#similarity-threshold-filtering)
-8. [Dynamic Context Optimisation](#dynamic-context-optimisation)
-   - [Token-Based Context Management](#token-based-context-management)
-   - [Message Building](#message-building)
-9. [Chat Flow & RAG Context Injection](#chat-flow--rag-context-injection)
-   - [End-to-End Flow](#end-to-end-flow)
-   - [RAG Context Format](#rag-context-format)
-10. [Semantic Chunking & Preprocessing](#semantic-chunking--preprocessing)
+- [Ollama Context Chat](#ollama-context-chat)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Features](#features)
+  - [Quick Start](#quick-start)
+    - [Prerequisites](#prerequisites)
+    - [Installation](#installation)
+    - [Development](#development)
+  - [RAG Architecture](#rag-architecture)
+    - [What is RAG?](#what-is-rag)
+    - [System Architecture Overview](#system-architecture-overview)
+    - [Complete Chat Data Flow](#complete-chat-data-flow)
+      - [Stage 1: User Message Submission](#stage-1-user-message-submission)
+      - [Stage 2: Load Model Configuration](#stage-2-load-model-configuration)
+      - [Stage 3: Load Conversation History](#stage-3-load-conversation-history)
+      - [Stage 4: RAG Retrieval Pipeline](#stage-4-rag-retrieval-pipeline)
+        - [Stage 4a: Generate Query Embedding](#stage-4a-generate-query-embedding)
+        - [Stage 4b: Vector Similarity Search](#stage-4b-vector-similarity-search)
+        - [Stage 4c: Filter by Similarity Threshold](#stage-4c-filter-by-similarity-threshold)
+        - [Stage 4d: Format Context with Metadata](#stage-4d-format-context-with-metadata)
+      - [Stage 5: Build Complete System Prompt](#stage-5-build-complete-system-prompt)
+      - [Stage 6: Construct Messages Array](#stage-6-construct-messages-array)
+      - [Stage 7: Send to Ollama API](#stage-7-send-to-ollama-api)
+      - [Stage 8: Stream Response Tokens](#stage-8-stream-response-tokens)
+      - [Stage 9: Display in UI](#stage-9-display-in-ui)
+      - [Stage 10: Add Citations](#stage-10-add-citations)
+      - [Stage 11: Save to Database](#stage-11-save-to-database)
+      - [Stage 12: Update Chat History](#stage-12-update-chat-history)
+    - [Complete Timing Breakdown](#complete-timing-breakdown)
+    - [Performance Optimisations in the Pipeline](#performance-optimisations-in-the-pipeline)
+    - [Error Handling at Each Stage](#error-handling-at-each-stage)
+  - [Document Storage \& Indexing](#document-storage--indexing)
+    - [Database Schema](#database-schema)
+    - [Semantic Markdown Processing](#semantic-markdown-processing)
+      - [1. Plain Text Documents](#1-plain-text-documents)
+      - [2. PDF Documents](#2-pdf-documents)
+      - [3. Code \& Markdown Documents](#3-code--markdown-documents)
+    - [Chunking Strategy](#chunking-strategy)
+      - [`chunkMarkdown()` - Most Sophisticated](#chunkmarkdown---most-sophisticated)
+      - [`chunkText()` - Sentence-Based](#chunktext---sentence-based)
+      - [`chunkCode()` - Structure-Preserving](#chunkcode---structure-preserving)
+  - [Vector Embeddings](#vector-embeddings)
+    - [Embedding Generation](#embedding-generation)
+    - [Parallel Batch Processing](#parallel-batch-processing)
+    - [Embedding Cache](#embedding-cache)
+  - [Retrieval Mechanism](#retrieval-mechanism)
+    - [Similarity Search](#similarity-search)
+    - [Query Processing](#query-processing)
+    - [Similarity Threshold Filtering](#similarity-threshold-filtering)
+  - [Dynamic Context Optimisation](#dynamic-context-optimisation)
+    - [Token-Based Context Management](#token-based-context-management)
+    - [Message Building](#message-building)
+  - [Chat Flow \& RAG Context Injection](#chat-flow--rag-context-injection)
+    - [End-to-End Flow](#end-to-end-flow)
+    - [RAG Context Format](#rag-context-format)
+  - [Semantic Chunking \& Preprocessing](#semantic-chunking--preprocessing)
     - [Heading Hierarchy Tracking](#heading-hierarchy-tracking)
     - [Markdown-First Approach](#markdown-first-approach)
     - [Chunk Metadata](#chunk-metadata)
-11. [Performance Optimisations](#performance-optimisations)
-12. [Intelligent RAG Features](#intelligent-rag-features)
-13. [Agent Mode (ReAct)](#agent-mode-react)
+  - [Performance Optimisations](#performance-optimisations)
+    - [Performance Logging \& Monitoring](#performance-logging--monitoring)
+      - [Features](#features-1)
+      - [Configuration](#configuration)
+      - [Log Format](#log-format)
+      - [Analysis Examples](#analysis-examples)
+      - [Common Bottlenecks](#common-bottlenecks)
+    - [Conversation Context Management](#conversation-context-management)
+  - [Intelligent RAG Features](#intelligent-rag-features)
+    - [Core Intelligence Features](#core-intelligence-features)
+      - [1. HyDE (Hypothetical Document Embeddings)](#1-hyde-hypothetical-document-embeddings)
+      - [2. Query Decomposition](#2-query-decomposition)
+      - [3. Context Compression](#3-context-compression)
+      - [4. Entity Tracking](#4-entity-tracking)
+    - [Quality and Accuracy Features](#quality-and-accuracy-features)
+      - [5. Citation System](#5-citation-system)
+      - [6. Confidence Scoring](#6-confidence-scoring)
+    - [Response Enhancement Features](#response-enhancement-features)
+      - [7. Professional Formatting](#7-professional-formatting)
+      - [8. Executive Summaries](#8-executive-summaries)
+      - [9. Follow-up Suggestions](#9-follow-up-suggestions)
+      - [10. Smart Disclaimers](#10-smart-disclaimers)
+    - [Intelligent RAG Data Flow](#intelligent-rag-data-flow)
+    - [Configuration](#configuration-1)
+  - [RAG Strategy Optimisation](#rag-strategy-optimisation)
+    - [RAG Strategy Learner](#rag-strategy-learner)
+    - [Conversation Momentum Detection](#conversation-momentum-detection)
+    - [Fast-Path RAG](#fast-path-rag)
+  - [Security \& Privacy](#security--privacy)
+    - [Prompt Injection Protection](#prompt-injection-protection)
+    - [PII Detection \& Redaction](#pii-detection--redaction)
+    - [Query Clarification](#query-clarification)
+  - [Resilience \& Monitoring](#resilience--monitoring)
+    - [Circuit Breaker](#circuit-breaker)
+    - [Rate Limiting](#rate-limiting)
+    - [Performance Logging](#performance-logging)
+  - [Agent Mode (ReAct)](#agent-mode-react)
     - [What is ReAct?](#what-is-react)
     - [Automatic Complexity Detection](#automatic-complexity-detection)
     - [Agent Configuration](#agent-configuration)
     - [Available Tools](#available-tools)
     - [Usage Examples](#usage-examples)
-    - [Performance Considerations](#performance-considerations-1)
+    - [Configuration Examples](#configuration-examples)
+    - [Performance Considerations](#performance-considerations)
     - [Monitoring and Debugging](#monitoring-and-debugging)
-14. [Integration with Ollama](#integration-with-ollama)
-    - [Configuration](#configuration)
+    - [Architecture](#architecture)
+    - [Common Issues and Solutions](#common-issues-and-solutions)
+  - [Integration with Ollama](#integration-with-ollama)
+    - [Configuration](#configuration-2)
     - [Streaming Chat API](#streaming-chat-api)
-15. [Vector Indexing & Search](#vector-indexing--search)
-16. [Data Flow Diagram](#data-flow-diagram)
-17. [Key Files & Responsibilities](#key-files--responsibilities)
-18. [Deployment](#deployment)
-19. [Technical Stack](#technical-stack)
-20. [Future Enhancements](#future-enhancements)
+  - [Vector Indexing \& Search](#vector-indexing--search)
+    - [MariaDB Vector Index](#mariadb-vector-index)
+    - [Distance Calculation](#distance-calculation)
+  - [Data Flow Diagram](#data-flow-diagram)
+  - [Key Files \& Responsibilities](#key-files--responsibilities)
+    - [Core Application Files](#core-application-files)
+    - [RAG Optimisation Files](#rag-optimisation-files)
+    - [Security \& Privacy Files](#security--privacy-files)
+    - [Resilience \& Monitoring Files](#resilience--monitoring-files)
+    - [Agent Mode Files](#agent-mode-files)
+    - [Route Components](#route-components)
+    - [Database Schema](#database-schema-1)
+  - [Deployment](#deployment)
+    - [Building for Production](#building-for-production)
+    - [Docker Deployment](#docker-deployment)
+    - [Cloud Deployment Options](#cloud-deployment-options)
+    - [Environment Variables](#environment-variables)
+    - [Production Considerations](#production-considerations)
+  - [Technical Stack](#technical-stack)
+    - [Frontend](#frontend)
+    - [Backend](#backend)
+    - [Key Libraries](#key-libraries)
+    - [Development Tools](#development-tools)
+  - [Future Enhancements](#future-enhancements)
+    - [Planned Optimisations](#planned-optimisations)
+    - [Potential Features](#potential-features)
+  - [Contributing](#contributing)
+  - [Licence](#licence)
+  - [Acknowledgements](#acknowledgements)
 
 ---
 
@@ -75,8 +163,19 @@ The application runs entirely locally with no external API dependencies, ensurin
 
 - **Advanced RAG Implementation** - Semantic chunking with heading hierarchy preservation
 - **Intelligent RAG System** - HyDE, query decomposition, context compression, and entity tracking
+- **RAG Strategy Learner** - Performance-based optimization that learns when to use HyDE vs fast retrieval
+- **Conversation Momentum** - Detects topic deepening, switching, or continuation to adjust retrieval strategy
+- **Fast-Path RAG** - Sub-second responses for simple queries by skipping expensive HyDE operations
 - **Agent Mode (ReAct)** - Multi-step reasoning with automatic complexity detection and tool use
 - **Professional Citations** - Inline source citations with page numbers and confidence scoring
+- **Security & Privacy**:
+  - **Prompt Injection Protection** - Sanitizes RAG context and detects malicious inputs
+  - **PII Detection & Redaction** - Identifies SSNs, credit cards, emails, phones, IPs
+  - **Query Clarification** - Pre-RAG check for ambiguous queries to save processing
+- **Resilience Features**:
+  - **Circuit Breaker** - Prevents cascading failures with automatic recovery
+  - **Rate Limiting** - Sliding window protection for uploads, queries, and embeddings
+- **Performance Monitoring** - Detailed timing logs with RAG strategy analysis
 - **Custom Model CMS** - Create and manage AI models with fine-tuned configurations
 - **Document Library** - Upload PDFs, text files, markdown, and code
 - **Context-Aware Chat** - Conversations grounded in your documents with smart disclaimers
@@ -1845,6 +1944,417 @@ For best performance on slower hardware, disable HyDE and Query Decomposition. T
 
 ---
 
+## RAG Strategy Optimisation
+
+The system includes intelligent mechanisms to optimise RAG performance by learning when expensive operations (like HyDE) are worth the cost, and when faster approaches suffice.
+
+### RAG Strategy Learner
+
+**Location**: [app/lib/rag-strategy-learner.server.ts](app/lib/rag-strategy-learner.server.ts)
+
+The RAG Strategy Learner analyses query patterns and performance logs to recommend the optimal retrieval strategy. This is a **fast operation** (pure pattern matching, no LLM calls).
+
+**Strategy Rules**:
+
+| Rule | Pattern | Strategy | Confidence |
+|------|---------|----------|------------|
+| Simple factual | "What is X?", "Who is Y?", "When did Z?" | Fast path | 85% |
+| Short queries | < 5 words | Fast path | 90% |
+| Early conversation | < 6 messages | Fast path | 80% |
+| Complex analytical | "Compare", "Analyse", "Explain how/why" | HyDE | 85% |
+| Multi-document | 3+ documents selected | HyDE | 75% |
+| Detailed queries | > 20 words | HyDE | 70% |
+| Default | Standard queries | Fast path | 70% |
+
+**Usage**:
+```typescript
+import { recommendRAGStrategy } from './rag-strategy-learner.server';
+
+const recommendation = recommendRAGStrategy(
+    message,           // User's query
+    conversationLength, // Number of messages in conversation
+    documentCount,     // Number of selected documents
+    useIntelligentRAG  // Whether HyDE is enabled in model config
+);
+
+console.log(recommendation);
+// {
+//   useHyDE: false,
+//   reason: 'Simple factual query - fast retrieval sufficient',
+//   confidence: 0.85
+// }
+```
+
+**Performance Log Analysis**:
+The learner can also analyse performance logs to extract insights:
+
+```typescript
+import { analyzePerformanceLogs } from './rag-strategy-learner.server';
+
+const insights = await analyzePerformanceLogs('./logs/performance.log');
+// {
+//   avgHyDEBenefit: 1.2,  // HyDE finds 20% more relevant chunks
+//   recommendationsAccuracy: 0.75,
+//   insights: [
+//     'Analyzed 150 requests (45 HyDE, 105 fast)',
+//     'Avg HyDE time: 2500ms vs Fast: 450ms',
+//     'HyDE overhead: 455% slower'
+//   ]
+// }
+```
+
+### Conversation Momentum Detection
+
+**Location**: [app/lib/conversation-momentum.server.ts](app/lib/conversation-momentum.server.ts)
+
+Analyses conversation patterns to detect whether the user is:
+- **Deepening** - Exploring a topic in more detail
+- **Switching** - Changing to a new topic
+- **Continuing** - Maintaining the same topic at the same depth
+- **Initial** - First message in conversation
+
+**How it works**:
+1. Extracts entities from current message and recent history
+2. Calculates entity overlap (Jaccard similarity)
+3. Detects depth signals (technical terms, "how", "why", "explain")
+4. Measures topic consistency across conversation
+
+**Momentum-Aware Adjustments**:
+
+| Momentum | Chunk Limit | Context Window | Behaviour |
+|----------|-------------|----------------|-----------|
+| Deepening | 7 chunks | 40 messages | More context for detailed exploration |
+| Switching | 4 chunks | 20 messages | Fresh start, reset context |
+| Continuing | 5 chunks | 30 messages | Standard settings |
+| Initial | 5 chunks | - | Full context for first message |
+
+**Usage**:
+```typescript
+import { analyzeConversationMomentum, buildMomentumAwareQuery } from './conversation-momentum.server';
+
+const analysis = analyzeConversationMomentum(message, conversationHistory);
+// {
+//   momentum: 'deepening',
+//   entityOverlap: 0.75,
+//   topicConsistency: 0.6,
+//   depthIndicator: 0.65,
+//   recommendations: {
+//     adjustChunkLimit: 7,
+//     adjustContextWindow: 40,
+//     useMoreHistory: true
+//   }
+// }
+
+const enhancedQuery = buildMomentumAwareQuery(message, conversationHistory, analysis.momentum);
+```
+
+### Fast-Path RAG
+
+**Location**: [app/lib/intelligent-chat-fast.server.ts](app/lib/intelligent-chat-fast.server.ts)
+
+A streamlined RAG path designed for **sub-second response times** by skipping expensive operations.
+
+**What's Skipped**:
+- ❌ HyDE (Hypothetical Document Embeddings)
+- ❌ Query decomposition
+- ❌ Multi-query expansion
+- ❌ Re-ranking
+- ❌ Context compression
+
+**What's Kept**:
+- ✅ Prompt injection detection
+- ✅ RAG context sanitisation
+- ✅ Basic vector similarity search
+- ✅ System prompt protection
+
+**Performance Target**: < 500ms for most queries (vs 2-5s with full HyDE)
+
+**Usage**:
+```typescript
+import { shouldUseFastPath, generateFastIntelligentContext } from './intelligent-chat-fast.server';
+
+// Check if query should use fast path
+const useFast = shouldUseFastPath(message, useHyDE, conversationLength, documentCount);
+
+if (useFast) {
+    const result = await generateFastIntelligentContext({
+        message,
+        documentUUIDs,
+        conversationHistory,
+        maxChunks: 3,
+        similarityThreshold: 0.3
+    });
+    // result.metadata.processingTime typically < 500ms
+}
+```
+
+---
+
+## Security & Privacy
+
+The system includes multiple layers of protection for both security and privacy.
+
+### Prompt Injection Protection
+
+**Location**: [app/lib/prompt-protection.ts](app/lib/prompt-protection.ts)
+
+Prevents malicious content in documents or user messages from hijacking the AI's behaviour.
+
+**Three layers of protection**:
+
+1. **RAG Context Sanitisation** - Removes injection patterns from retrieved documents:
+   ```typescript
+   import { sanitizeRAGContext } from './prompt-protection';
+   
+   const safeContext = sanitizeRAGContext(ragContext);
+   // Removes: "ignore previous instructions", "[SYSTEM]", "### System:", etc.
+   ```
+
+2. **System Prompt Protection** - Wraps system prompts with security instructions:
+   ```typescript
+   import { protectSystemPrompt } from './prompt-protection';
+   
+   const protectedPrompt = protectSystemPrompt(systemPrompt);
+   // Adds security note about maintaining role and including disclaimers
+   ```
+
+3. **User Message Detection** - Flags suspicious user inputs:
+   ```typescript
+   import { detectPromptInjection } from './prompt-protection';
+   
+   const warning = detectPromptInjection(userMessage);
+   if (warning) {
+       // Returns: "I cannot process requests that attempt to override my instructions..."
+   }
+   ```
+
+**Patterns Detected & Sanitised**:
+- "ignore previous instructions"
+- "forget all prompts"
+- "you are now [role]"
+- "your new purpose is"
+- System markers: `[SYSTEM]`, `[INST]`, `<|im_start|>`, `### System:`
+
+### PII Detection & Redaction
+
+**Location**: [app/lib/pii-detection.ts](app/lib/pii-detection.ts)
+
+Identifies and optionally redacts Personally Identifiable Information from text.
+
+**Supported PII Types**:
+
+| Type | Pattern Example | Validation |
+|------|-----------------|------------|
+| SSN | 123-45-6789 | Invalid patterns filtered |
+| Credit Card | 4111-1111-1111-1111 | Luhn algorithm check |
+| Email | user@example.com | Format validation |
+| Phone | +1 (555) 123-4567 | US/International formats |
+| IP Address | 192.168.1.1 | Octet range validation |
+| URL | https://example.com | HTTP/HTTPS patterns |
+
+**Usage**:
+```typescript
+import { detectPII, redactPII, PIIDetectionResult } from './pii-detection';
+
+// Detect without redacting
+const matches = detectPII(text);
+// [{ type: 'email', value: 'user@example.com', position: 45 }]
+
+// Detect and redact
+const result: PIIDetectionResult = redactPII(text);
+// {
+//   text: 'Contact [EMAIL REDACTED] for support',
+//   piiFound: [...],
+//   hasRedactions: true
+// }
+
+// Selective detection
+const ssnOnly = detectPII(text, ['ssn', 'creditCard']);
+```
+
+### Query Clarification
+
+**Location**: [app/lib/query-clarification.server.ts](app/lib/query-clarification.server.ts)
+
+Pre-RAG check that detects ambiguous queries **before** expensive processing, saving time and improving response quality.
+
+**Clarification Triggers**:
+
+| Scenario | Example | Response |
+|----------|---------|----------|
+| Unresolved pronouns | "What about it?" (early conversation) | Asks for specific reference |
+| Very vague queries | "What?", "How?", "Tell me" | Requests more details |
+| Ambiguous comparisons | "Which is better?" (no context) | Asks for criteria |
+| Orphaned follow-ups | "Also, what else?" (first message) | Requests topic context |
+
+**Usage**:
+```typescript
+import { detectClarificationNeeds } from './query-clarification.server';
+
+const clarification = detectClarificationNeeds(message, conversationHistory);
+
+if (clarification.needed) {
+    // Return clarification request instead of processing
+    return {
+        needsClarification: true,
+        reason: clarification.reason,
+        suggestions: clarification.suggestions
+    };
+}
+
+// Continue with RAG processing...
+```
+
+**Benefits**:
+- Saves 2-5 seconds per ambiguous query
+- Improves response relevance
+- Better user experience through proactive guidance
+
+---
+
+## Resilience & Monitoring
+
+### Circuit Breaker
+
+**Location**: [app/lib/circuit-breaker.ts](app/lib/circuit-breaker.ts)
+
+Implements the circuit breaker pattern to prevent cascading failures when external services (like Ollama) become unavailable.
+
+**States**:
+- **Closed** - Normal operation, requests flow through
+- **Open** - Service unavailable, requests fail fast
+- **Half-Open** - Testing if service recovered
+
+**Configuration**:
+```typescript
+import { CircuitBreaker } from './circuit-breaker';
+
+const breaker = new CircuitBreaker('ollama', {
+    failureThreshold: 5,      // Open after 5 failures
+    successThreshold: 2,      // Close after 2 successes in half-open
+    timeout: 60000,           // Try half-open after 60s
+    monitoringPeriod: 120000  // Count failures within 2 minutes
+});
+
+// Usage
+try {
+    const result = await breaker.execute(() => 
+        fetch('http://localhost:11434/api/chat')
+    );
+} catch (error) {
+    if (error.message.includes('Circuit breaker')) {
+        // Service temporarily unavailable, use fallback
+    }
+}
+```
+
+**Benefits**:
+- Prevents resource exhaustion from failing requests
+- Allows services time to recover
+- Provides clear feedback on service status
+
+### Rate Limiting
+
+**Location**: [app/lib/rate-limiter.ts](app/lib/rate-limiter.ts)
+
+Sliding window rate limiter to protect against abuse.
+
+**Default Limits**:
+
+| Type | Limit | Window | Block Duration |
+|------|-------|--------|----------------|
+| Upload | 10 requests | 1 hour | 15 minutes |
+| Query | 60 requests | 1 minute | - |
+| Embedding | 100 requests | 1 minute | - |
+
+**Usage**:
+```typescript
+import { checkRateLimit, resetRateLimit, getRateLimiterStats } from './rate-limiter';
+
+const result = checkRateLimit(userId, 'upload');
+
+if (!result.allowed) {
+    return {
+        error: `Rate limit exceeded. Try again in ${result.retryAfter}s`,
+        remaining: result.remaining
+    };
+}
+
+// For admin actions
+resetRateLimit(userId, 'upload');
+
+// Monitoring
+const stats = getRateLimiterStats();
+```
+
+**Note**: Current implementation is in-memory. For production multi-instance deployments, use Redis.
+
+### Performance Logging
+
+**Location**: [app/lib/performance-logger.server.ts](app/lib/performance-logger.server.ts)
+
+Detailed timing and metadata logging for performance analysis.
+
+**Tracked Metrics**:
+- Total request time
+- Model lookup time
+- Token calculation time
+- RAG processing time
+- Embedding generation time
+- System prompt protection time
+
+**Log Entry Structure**:
+```json
+{
+  "timestamp": "2025-01-07T10:30:00.000Z",
+  "chatId": "uuid-abc-123",
+  "messagePreview": "How do I configure the...",
+  "modelName": "llama3.2:1b",
+  "timings": {
+    "total": 3250,
+    "modelLookup": 15,
+    "tokenCalc": 5,
+    "ragProcessing": 450,
+    "embeddingGeneration": 120
+  },
+  "metadata": {
+    "hasDocuments": true,
+    "documentCount": 2,
+    "useIntelligentRAG": false,
+    "conversationLength": 8,
+    "ragChunksFound": 3,
+    "cacheHit": true
+  }
+}
+```
+
+**Usage**:
+```typescript
+import { createTimingTracker, logPerformance } from './performance-logger.server';
+
+const tracker = createTimingTracker();
+
+// Track various stages
+tracker.modelLookupStart = performance.now();
+// ... do model lookup ...
+tracker.modelLookupEnd = performance.now();
+
+// Log at end of request
+logPerformance(tracker, {
+    chatId,
+    message,
+    modelName: 'llama3.2:1b',
+    hasDocuments: true,
+    documentCount: 2,
+    useIntelligentRAG: false,
+    conversationLength: 8
+});
+```
+
+**Log Location**: `./logs/performance.log` (JSONL format)
+
+---
+
 ## Agent Mode (ReAct)
 
 Agent Mode adds ReAct (Reasoning + Acting) pattern capabilities, enabling the system to handle complex queries through multi-step reasoning and tool use.
@@ -2336,6 +2846,40 @@ graph TB
 | [app/lib/config.ts](app/lib/config.ts) | **Configuration** | Ollama endpoints, model lists, RAG settings |
 | [app/hooks/useOllama.ts](app/hooks/useOllama.ts) | **Ollama Integration** | `useOllama()` hook for streaming chat API |
 
+### RAG Optimisation Files
+
+| File | Responsibility | Key Functions |
+|------|----------------|---------------|
+| [app/lib/intelligent-chat-fast.server.ts](app/lib/intelligent-chat-fast.server.ts) | **Fast-Path RAG** | `shouldUseFastPath()`, `generateFastIntelligentContext()` |
+| [app/lib/rag-strategy-learner.server.ts](app/lib/rag-strategy-learner.server.ts) | **Strategy Optimisation** | `recommendRAGStrategy()`, `analyzePerformanceLogs()` |
+| [app/lib/conversation-momentum.server.ts](app/lib/conversation-momentum.server.ts) | **Conversation Analysis** | `analyzeConversationMomentum()`, `buildMomentumAwareQuery()` |
+| [app/lib/intelligent-rag.server.ts](app/lib/intelligent-rag.server.ts) | **Advanced RAG** | HyDE, query decomposition, entity tracking |
+
+### Security & Privacy Files
+
+| File | Responsibility | Key Functions |
+|------|----------------|---------------|
+| [app/lib/prompt-protection.ts](app/lib/prompt-protection.ts) | **Injection Protection** | `sanitizeRAGContext()`, `protectSystemPrompt()`, `detectPromptInjection()` |
+| [app/lib/pii-detection.ts](app/lib/pii-detection.ts) | **PII Handling** | `detectPII()`, `redactPII()` |
+| [app/lib/query-clarification.server.ts](app/lib/query-clarification.server.ts) | **Query Validation** | `detectClarificationNeeds()` |
+| [app/lib/validation.ts](app/lib/validation.ts) | **Input Validation** | Request validation utilities |
+
+### Resilience & Monitoring Files
+
+| File | Responsibility | Key Functions |
+|------|----------------|---------------|
+| [app/lib/circuit-breaker.ts](app/lib/circuit-breaker.ts) | **Fault Tolerance** | `CircuitBreaker` class with execute/stats |
+| [app/lib/rate-limiter.ts](app/lib/rate-limiter.ts) | **Rate Limiting** | `checkRateLimit()`, `resetRateLimit()`, `getRateLimiterStats()` |
+| [app/lib/performance-logger.server.ts](app/lib/performance-logger.server.ts) | **Performance Tracking** | `createTimingTracker()`, `logPerformance()` |
+
+### Agent Mode Files
+
+| File | Responsibility | Key Functions |
+|------|----------------|---------------|
+| [app/lib/agent/react.server.ts](app/lib/agent/react.server.ts) | **ReAct Agent** | Agent orchestration and reasoning loop |
+| [app/lib/agent/tools.server.ts](app/lib/agent/tools.server.ts) | **Agent Tools** | Tool definitions and implementations |
+| [app/lib/agent/complexity.ts](app/lib/agent/complexity.ts) | **Query Analysis** | Complexity detection for auto-agent mode |
+
 ### Route Components
 
 | File | Purpose |
@@ -2350,7 +2894,7 @@ graph TB
 
 | File | Contents |
 |------|----------|
-| [schema/documents.sql](schema/documents.sql) | `documents` table (metadata + markdown), `document_chunks` table (chunks + VECTOR(768) embeddings) |
+| [schema/schema.sql](schema/schema.sql) | `documents` table (metadata + markdown), `document_chunks` table (chunks + VECTOR(768) embeddings) |
 
 ---
 

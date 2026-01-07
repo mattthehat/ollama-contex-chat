@@ -25,11 +25,12 @@ export function calculateTotalTokens(messages: Message[]): number {
 /**
  * Build messages array for Ollama with smart token-based context management
  *
- * PERFORMANCE OPTIMIZATION:
+ * CONTEXT MANAGEMENT:
  * - UI displays last 50 messages (via getChatMessages)
- * - Ollama receives only last 20 messages (this function)
- * - This keeps UI informative while maintaining fast response times
- * - 20 messages = ~10 full exchanges, sufficient for maintaining conversation coherence
+ * - Ollama receives messages based on TOKEN BUDGET (not hard message limit)
+ * - Includes as many messages as fit within maxContextTokens
+ * - maxMessages provides a safety cap (default: 50 = 25 exchanges)
+ * - Token-based limiting ensures we use available context efficiently
  *
  * This function can be used on both client and server
  */
@@ -39,7 +40,7 @@ export function buildMessagesForOllama(
     systemPrompt: string = 'You are a helpful assistant.',
     ragContext: string = '',
     maxContextTokens: number = config.maxContext * 0.7, // Use 70% of max context to leave room for response
-    maxMessages: number = 20 // Hard limit: Send last 20 messages (~10 exchanges) for good context coverage
+    maxMessages: number = 50 // Safety cap: Max 50 messages (25 exchanges) to prevent excessive history
 ): Message[] {
     // Combine system prompt with RAG context if available
     const fullSystemPrompt = ragContext

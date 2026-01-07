@@ -1205,17 +1205,39 @@ export async function buildRAGContext(
         return '';
     }
 
-    // Build weighted query: current message is most important
+    // Build contextual query using momentum-aware strategy
     let contextualQuery = currentMessage;
 
-    // Add recent user messages (not assistant responses) with lower weight
-    const recentUserMessages = conversationHistory
-        .filter(m => m.role === 'user')
-        .slice(-2)
-        .map(m => m.content);
+    // Fast path for short queries (< 5 words) - always expand for better retrieval
+    const wordCount = currentMessage.trim().split(/\s+/).length;
+    if (wordCount < 5 && conversationHistory.length > 0) {
+        const recentUserMessages = conversationHistory
+            .filter(m => m.role === 'user')
+            .slice(-3)
+            .map(m => m.content);
 
-    if (recentUserMessages.length > 0) {
-        contextualQuery = `${currentMessage} ${recentUserMessages.join(' ')}`;
+        if (recentUserMessages.length > 0) {
+            contextualQuery = `${currentMessage} ${recentUserMessages.join(' ')}`;
+            console.log(`  [RAG] Short query (${wordCount} words): expanded with ${recentUserMessages.length} recent messages`);
+        }
+    } else if (conversationHistory.length > 0) {
+        // For longer queries, use smart momentum-based expansion
+        // This is lightweight - only extracts entities, no LLM calls
+        const { analyzeConversationMomentum, buildMomentumAwareQuery } = await import(
+            './conversation-momentum.server'
+        );
+
+        const momentumStart = performance.now();
+        const momentum = analyzeConversationMomentum(currentMessage, conversationHistory);
+        contextualQuery = buildMomentumAwareQuery(currentMessage, conversationHistory, momentum.momentum);
+
+        console.log(`  [RAG] Momentum analysis: ${(performance.now() - momentumStart).toFixed(2)}ms`);
+
+        // Adjust maxChunks based on momentum recommendations (if deepening, get more context)
+        if (momentum.recommendations.adjustChunkLimit) {
+            maxChunks = Math.min(maxChunks, momentum.recommendations.adjustChunkLimit);
+            console.log(`  [RAG] Adjusted chunk limit to ${maxChunks} based on ${momentum.momentum} momentum`);
+        }
     }
 
     // Limit query length to prevent overly long embeddings (max ~500 words)

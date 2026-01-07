@@ -6,9 +6,9 @@ import config from '~/lib/config';
 
 export const loader = async () => {
     const documents = await getAllDocuments();
-    const availableModels = config.chatModels.map(m => ({
+    const availableModels = config.chatModels.map((m) => ({
         id: m.modelName,
-        name: m.friendlyName
+        name: m.friendlyName,
     }));
     return { documents, availableModels };
 };
@@ -37,13 +37,21 @@ export const action = async ({ request }: Route.ActionArgs) => {
     const systemPrompt = formData.get('systemPrompt') as string;
 
     // Parse numeric values
-    const ollamaTemperature = parseFloat(formData.get('ollamaTemperature') as string);
+    const ollamaTemperature = parseFloat(
+        formData.get('ollamaTemperature') as string
+    );
     const ollamaTopP = parseFloat(formData.get('ollamaTopP') as string);
     const ollamaTopK = parseInt(formData.get('ollamaTopK') as string);
-    const ollamaRepeatPenalty = parseFloat(formData.get('ollamaRepeatPenalty') as string);
+    const ollamaRepeatPenalty = parseFloat(
+        formData.get('ollamaRepeatPenalty') as string
+    );
     const ragMaxChunks = parseInt(formData.get('ragMaxChunks') as string);
-    const ragSimilarityThreshold = parseFloat(formData.get('ragSimilarityThreshold') as string);
-    const maxContextTokens = parseInt(formData.get('maxContextTokens') as string);
+    const ragSimilarityThreshold = parseFloat(
+        formData.get('ragSimilarityThreshold') as string
+    );
+    const maxContextTokens = parseInt(
+        formData.get('maxContextTokens') as string
+    );
     const maxOutputTokens = parseInt(formData.get('maxOutputTokens') as string);
 
     // Parse boolean values
@@ -54,25 +62,43 @@ export const action = async ({ request }: Route.ActionArgs) => {
 
     // Intelligent RAG features
     const ragUseHyDE = formData.get('ragUseHyDE') === 'on';
-    const ragUseQueryDecomposition = formData.get('ragUseQueryDecomposition') === 'on';
-    const ragUseContextCompression = formData.get('ragUseContextCompression') === 'on';
+    const ragUseQueryDecomposition =
+        formData.get('ragUseQueryDecomposition') === 'on';
+    const ragUseContextCompression =
+        formData.get('ragUseContextCompression') === 'on';
     const ragUseEntityTracking = formData.get('ragUseEntityTracking') === 'on';
     const ragEnableCitations = formData.get('ragEnableCitations') === 'on';
-    const ragEnableConfidenceScoring = formData.get('ragEnableConfidenceScoring') === 'on';
-    const ragEnableResponseEnhancement = formData.get('ragEnableResponseEnhancement') === 'on';
-    const ragAddExecutiveSummary = formData.get('ragAddExecutiveSummary') === 'on';
-    const ragAddFollowUpSuggestions = formData.get('ragAddFollowUpSuggestions') === 'on';
-    const ragAddSmartDisclaimers = formData.get('ragAddSmartDisclaimers') === 'on';
+    const ragEnableConfidenceScoring =
+        formData.get('ragEnableConfidenceScoring') === 'on';
+    const ragEnableResponseEnhancement =
+        formData.get('ragEnableResponseEnhancement') === 'on';
+    const ragAddExecutiveSummary =
+        formData.get('ragAddExecutiveSummary') === 'on';
+    const ragAddFollowUpSuggestions =
+        formData.get('ragAddFollowUpSuggestions') === 'on';
+    const ragAddSmartDisclaimers =
+        formData.get('ragAddSmartDisclaimers') === 'on';
 
     // Agent configuration
-    const agentMode = formData.get('agentMode') as 'disabled' | 'auto' | 'forced';
-    const agentMaxIterations = parseInt(formData.get('agentMaxIterations') as string);
-    const agentTemperature = parseFloat(formData.get('agentTemperature') as string);
-    const agentComplexityThreshold = formData.get('agentComplexityThreshold') as 'low' | 'medium' | 'high';
+    const agentMode = formData.get('agentMode') as
+        | 'disabled'
+        | 'auto'
+        | 'forced';
+    const agentMaxIterations = parseInt(
+        formData.get('agentMaxIterations') as string
+    );
+    const agentTemperature = parseFloat(
+        formData.get('agentTemperature') as string
+    );
+    const agentComplexityThreshold = formData.get(
+        'agentComplexityThreshold'
+    ) as 'low' | 'medium' | 'high';
     const agentShowReasoning = formData.get('agentShowReasoning') === 'on';
 
     // Get selected documents
-    const documentIds = formData.getAll('documents').map((id) => parseInt(id as string));
+    const documentIds = formData
+        .getAll('documents')
+        .map((id) => parseInt(id as string));
 
     // Validation
     const errors: ActionData['errors'] = {};
@@ -140,15 +166,22 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-4xl">
-            <h1 className="text-3xl font-bold mb-8 dark:text-white">Create New AI Model</h1>
+            <h1 className="text-3xl font-bold mb-8 dark:text-white">
+                Create New AI Model
+            </h1>
 
             <Form method="post" className="space-y-8">
                 {/* Basic Information */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Basic Information</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Basic Information
+                    </h2>
                     <div className="space-y-4">
                         <div>
-                            <label htmlFor="modelName" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="modelName"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Model Name *
                             </label>
                             <input
@@ -159,14 +192,21 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 placeholder="e.g., Code Assistant, Research Helper"
                                 required
                             />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">A friendly name to identify this AI model</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                A friendly name to identify this AI model
+                            </p>
                             {actionData?.errors?.modelName && (
-                                <p className="text-red-600 dark:text-red-400 text-sm mt-1">{actionData.errors.modelName}</p>
+                                <p className="text-red-600 dark:text-red-400 text-sm mt-1">
+                                    {actionData.errors.modelName}
+                                </p>
                             )}
                         </div>
 
                         <div>
-                            <label htmlFor="modelDescription" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="modelDescription"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Description
                             </label>
                             <textarea
@@ -176,17 +216,25 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 placeholder="Describe what this AI model is specialised for..."
                             />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional description of the model's purpose and capabilities</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Optional description of the model's purpose and
+                                capabilities
+                            </p>
                         </div>
                     </div>
                 </div>
 
                 {/* Ollama Configuration */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Ollama Configuration</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Ollama Configuration
+                    </h2>
                     <div className="space-y-4">
                         <div>
-                            <label htmlFor="ollamaModel" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="ollamaModel"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Base Model *
                             </label>
                             <select
@@ -201,15 +249,23 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     </option>
                                 ))}
                             </select>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">The underlying Ollama model that powers this AI assistant</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                The underlying Ollama model that powers this AI
+                                assistant
+                            </p>
                             {actionData?.errors?.ollamaModel && (
-                                <p className="text-red-600 dark:text-red-400 text-sm mt-1">{actionData.errors.ollamaModel}</p>
+                                <p className="text-red-600 dark:text-red-400 text-sm mt-1">
+                                    {actionData.errors.ollamaModel}
+                                </p>
                             )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label htmlFor="ollamaTemperature" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label
+                                    htmlFor="ollamaTemperature"
+                                    className="block text-sm font-medium mb-1 dark:text-gray-200"
+                                >
                                     Temperature
                                 </label>
                                 <input
@@ -222,11 +278,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="0.7"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Controls randomness: 0 = deterministic, 1 = balanced, 2 = very creative</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Controls randomness: 0 = deterministic, 1 =
+                                    balanced, 2 = very creative
+                                </p>
                             </div>
 
                             <div>
-                                <label htmlFor="ollamaTopP" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label
+                                    htmlFor="ollamaTopP"
+                                    className="block text-sm font-medium mb-1 dark:text-gray-200"
+                                >
                                     Top P
                                 </label>
                                 <input
@@ -239,11 +301,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="0.9"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Limits token choices to top probability mass (0.9 = top 90% likely tokens)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Limits token choices to top probability mass
+                                    (0.9 = top 90% likely tokens)
+                                </p>
                             </div>
 
                             <div>
-                                <label htmlFor="ollamaTopK" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label
+                                    htmlFor="ollamaTopK"
+                                    className="block text-sm font-medium mb-1 dark:text-gray-200"
+                                >
                                     Top K
                                 </label>
                                 <input
@@ -255,11 +323,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="40"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Limits token choices to top K most likely options (40 = consider 40 tokens)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Limits token choices to top K most likely
+                                    options (40 = consider 40 tokens)
+                                </p>
                             </div>
 
                             <div>
-                                <label htmlFor="ollamaRepeatPenalty" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label
+                                    htmlFor="ollamaRepeatPenalty"
+                                    className="block text-sm font-medium mb-1 dark:text-gray-200"
+                                >
                                     Repeat Penalty
                                 </label>
                                 <input
@@ -272,7 +346,10 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="1.1"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Discourages repetition: 1.0 = no penalty, 1.1 = slight penalty, 2.0 = strong penalty</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Discourages repetition: 1.0 = no penalty,
+                                    1.1 = slight penalty, 2.0 = strong penalty
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -280,7 +357,9 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
 
                 {/* RAG Configuration */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">RAG Configuration</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        RAG Configuration
+                    </h2>
                     <div className="space-y-4">
                         <div>
                             <div className="flex items-center gap-3">
@@ -291,11 +370,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     className="w-4 h-4"
                                     defaultChecked
                                 />
-                                <label htmlFor="useAdvancedRAG" className="text-sm font-medium dark:text-gray-200">
+                                <label
+                                    htmlFor="useAdvancedRAG"
+                                    className="text-sm font-medium dark:text-gray-200"
+                                >
                                     Use Advanced RAG
                                 </label>
                             </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Enables sophisticated retrieval techniques for better context matching</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                Enables sophisticated retrieval techniques for
+                                better context matching
+                            </p>
                         </div>
 
                         <div className="pl-7 space-y-3 border-l-2 border-gray-200 dark:border-gray-700">
@@ -308,11 +393,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                         className="w-4 h-4"
                                         defaultChecked
                                     />
-                                    <label htmlFor="ragUseMultiQuery" className="text-sm dark:text-gray-300">
+                                    <label
+                                        htmlFor="ragUseMultiQuery"
+                                        className="text-sm dark:text-gray-300"
+                                    >
                                         Multi-Query Retrieval
                                     </label>
                                 </div>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Generates multiple search variations to find more relevant context</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                    Generates multiple search variations to find
+                                    more relevant context
+                                </p>
                             </div>
 
                             <div>
@@ -324,11 +415,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                         className="w-4 h-4"
                                         defaultChecked
                                     />
-                                    <label htmlFor="ragUseHybridSearch" className="text-sm dark:text-gray-300">
+                                    <label
+                                        htmlFor="ragUseHybridSearch"
+                                        className="text-sm dark:text-gray-300"
+                                    >
                                         Hybrid Search
                                     </label>
                                 </div>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Combines semantic (vector) and keyword (BM25) search for better results</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                    Combines semantic (vector) and keyword
+                                    (BM25) search for better results
+                                </p>
                             </div>
 
                             <div>
@@ -340,17 +437,26 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                         className="w-4 h-4"
                                         defaultChecked
                                     />
-                                    <label htmlFor="ragUseReranking" className="text-sm dark:text-gray-300">
+                                    <label
+                                        htmlFor="ragUseReranking"
+                                        className="text-sm dark:text-gray-300"
+                                    >
                                         Re-ranking
                                     </label>
                                 </div>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Reorders search results by relevance for higher quality context</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                    Reorders search results by relevance for
+                                    higher quality context
+                                </p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label htmlFor="ragMaxChunks" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label
+                                    htmlFor="ragMaxChunks"
+                                    className="block text-sm font-medium mb-1 dark:text-gray-200"
+                                >
                                     Max Chunks
                                 </label>
                                 <input
@@ -362,11 +468,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="5"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum number of document chunks to include in context (higher = more info, slower)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Maximum number of document chunks to include
+                                    in context (higher = more info, slower)
+                                </p>
                             </div>
 
                             <div>
-                                <label htmlFor="ragSimilarityThreshold" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label
+                                    htmlFor="ragSimilarityThreshold"
+                                    className="block text-sm font-medium mb-1 dark:text-gray-200"
+                                >
                                     Similarity Threshold
                                 </label>
                                 <input
@@ -379,7 +491,10 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="0.1"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum similarity score to include a chunk (0.1 = very lenient, 0.7 = strict)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Minimum similarity score to include a chunk
+                                    (0.1 = very lenient, 0.7 = strict)
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -387,15 +502,20 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
 
                 {/* Intelligent RAG Features */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Intelligent RAG Features</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Intelligent RAG Features
+                    </h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                        Professional-grade features for better retrieval, citations, and response quality
+                        Professional-grade features for better retrieval,
+                        citations, and response quality
                     </p>
 
                     <div className="space-y-4">
                         {/* Core Intelligent Features */}
                         <div className="space-y-3">
-                            <h3 className="text-sm font-semibold dark:text-white">Core Intelligence</h3>
+                            <h3 className="text-sm font-semibold dark:text-white">
+                                Core Intelligence
+                            </h3>
 
                             <div className="pl-4 space-y-3 border-l-2 border-blue-200 dark:border-blue-700">
                                 <div>
@@ -407,11 +527,18 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             className="w-4 h-4"
                                             defaultChecked
                                         />
-                                        <label htmlFor="ragUseHyDE" className="text-sm font-medium dark:text-gray-300">
-                                            HyDE (Hypothetical Document Embeddings)
+                                        <label
+                                            htmlFor="ragUseHyDE"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
+                                            HyDE (Hypothetical Document
+                                            Embeddings)
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Generates hypothetical answers for 30-50% better retrieval accuracy</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Generates hypothetical answers for
+                                        30-50% better retrieval accuracy
+                                    </p>
                                 </div>
 
                                 <div>
@@ -423,11 +550,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             className="w-4 h-4"
                                             defaultChecked
                                         />
-                                        <label htmlFor="ragUseQueryDecomposition" className="text-sm font-medium dark:text-gray-300">
+                                        <label
+                                            htmlFor="ragUseQueryDecomposition"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
                                             Query Decomposition
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Breaks complex questions into sub-queries for comprehensive answers</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Breaks complex questions into
+                                        sub-queries for comprehensive answers
+                                    </p>
                                 </div>
 
                                 <div>
@@ -439,11 +572,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             className="w-4 h-4"
                                             defaultChecked
                                         />
-                                        <label htmlFor="ragUseContextCompression" className="text-sm font-medium dark:text-gray-300">
+                                        <label
+                                            htmlFor="ragUseContextCompression"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
                                             Contextual Compression
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Removes irrelevant sentences, fits 2-3x more relevant content in context</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Removes irrelevant sentences, fits 2-3x
+                                        more relevant content in context
+                                    </p>
                                 </div>
 
                                 <div>
@@ -455,18 +594,26 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             className="w-4 h-4"
                                             defaultChecked
                                         />
-                                        <label htmlFor="ragUseEntityTracking" className="text-sm font-medium dark:text-gray-300">
+                                        <label
+                                            htmlFor="ragUseEntityTracking"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
                                             Entity Tracking
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Tracks topics and concepts across conversation for better context</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Tracks topics and concepts across
+                                        conversation for better context
+                                    </p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Quality Features */}
                         <div className="space-y-3">
-                            <h3 className="text-sm font-semibold dark:text-white">Quality & Accuracy</h3>
+                            <h3 className="text-sm font-semibold dark:text-white">
+                                Quality & Accuracy
+                            </h3>
 
                             <div className="pl-4 space-y-3 border-l-2 border-green-200 dark:border-green-700">
                                 <div>
@@ -478,11 +625,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             className="w-4 h-4"
                                             defaultChecked
                                         />
-                                        <label htmlFor="ragEnableCitations" className="text-sm font-medium dark:text-gray-300">
+                                        <label
+                                            htmlFor="ragEnableCitations"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
                                             Citations [1], [2]
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Add inline citations with page numbers to responses</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Add inline citations with page numbers
+                                        to responses
+                                    </p>
                                 </div>
 
                                 <div>
@@ -494,18 +647,26 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             className="w-4 h-4"
                                             defaultChecked
                                         />
-                                        <label htmlFor="ragEnableConfidenceScoring" className="text-sm font-medium dark:text-gray-300">
+                                        <label
+                                            htmlFor="ragEnableConfidenceScoring"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
                                             Confidence Scoring
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Calculates high/medium/low confidence for answer quality</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Calculates high/medium/low confidence
+                                        for answer quality
+                                    </p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Response Enhancement */}
                         <div className="space-y-3">
-                            <h3 className="text-sm font-semibold dark:text-white">Response Enhancement</h3>
+                            <h3 className="text-sm font-semibold dark:text-white">
+                                Response Enhancement
+                            </h3>
 
                             <div className="pl-4 space-y-3 border-l-2 border-purple-200 dark:border-purple-700">
                                 <div>
@@ -517,11 +678,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             className="w-4 h-4"
                                             defaultChecked
                                         />
-                                        <label htmlFor="ragEnableResponseEnhancement" className="text-sm font-medium dark:text-gray-300">
+                                        <label
+                                            htmlFor="ragEnableResponseEnhancement"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
                                             Professional Formatting
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Enhances responses with proper structure, code blocks, and formatting</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Enhances responses with proper
+                                        structure, code blocks, and formatting
+                                    </p>
                                 </div>
 
                                 <div>
@@ -532,11 +699,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             name="ragAddExecutiveSummary"
                                             className="w-4 h-4"
                                         />
-                                        <label htmlFor="ragAddExecutiveSummary" className="text-sm font-medium dark:text-gray-300">
+                                        <label
+                                            htmlFor="ragAddExecutiveSummary"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
                                             Executive Summaries
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Add brief summaries for long responses (300+ words)</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Add brief summaries for long responses
+                                        (300+ words)
+                                    </p>
                                 </div>
 
                                 <div>
@@ -548,11 +721,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             className="w-4 h-4"
                                             defaultChecked
                                         />
-                                        <label htmlFor="ragAddFollowUpSuggestions" className="text-sm font-medium dark:text-gray-300">
+                                        <label
+                                            htmlFor="ragAddFollowUpSuggestions"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
                                             Follow-up Suggestions
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Suggest relevant follow-up questions based on context</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Suggest relevant follow-up questions
+                                        based on context
+                                    </p>
                                 </div>
 
                                 <div>
@@ -564,11 +743,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                             className="w-4 h-4"
                                             defaultChecked
                                         />
-                                        <label htmlFor="ragAddSmartDisclaimers" className="text-sm font-medium dark:text-gray-300">
+                                        <label
+                                            htmlFor="ragAddSmartDisclaimers"
+                                            className="text-sm font-medium dark:text-gray-300"
+                                        >
                                             Smart Disclaimers
                                         </label>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">Auto-add appropriate disclaimers (legal, medical, financial, security)</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                                        Auto-add appropriate disclaimers (legal,
+                                        medical, financial, security)
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -577,13 +762,20 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
 
                 {/* Agent Configuration */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Agent Mode (ReAct)</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Agent Mode (ReAct)
+                    </h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                        Configure multi-step reasoning capabilities for complex queries. The agent can automatically detect query complexity and use tools to gather information.
+                        Configure multi-step reasoning capabilities for complex
+                        queries. The agent can automatically detect query
+                        complexity and use tools to gather information.
                     </p>
                     <div className="space-y-4">
                         <div>
-                            <label htmlFor="agentMode" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="agentMode"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Agent Mode
                             </label>
                             <select
@@ -592,18 +784,29 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 defaultValue="auto"
                             >
-                                <option value="disabled">Disabled - Never use agent mode</option>
-                                <option value="auto">Auto - Detect complexity and use agent when needed</option>
-                                <option value="forced">Forced - Always use agent mode</option>
+                                <option value="disabled">
+                                    Disabled - Never use agent mode
+                                </option>
+                                <option value="auto">
+                                    Auto - Detect complexity and use agent when
+                                    needed
+                                </option>
+                                <option value="forced">
+                                    Forced - Always use agent mode
+                                </option>
                             </select>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                Auto mode automatically activates agent reasoning for complex queries
+                                Auto mode automatically activates agent
+                                reasoning for complex queries
                             </p>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label htmlFor="agentMaxIterations" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label
+                                    htmlFor="agentMaxIterations"
+                                    className="block text-sm font-medium mb-1 dark:text-gray-200"
+                                >
                                     Max Iterations
                                 </label>
                                 <input
@@ -616,11 +819,16 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="5"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum reasoning loops (1-10)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Maximum reasoning loops (1-10)
+                                </p>
                             </div>
 
                             <div>
-                                <label htmlFor="agentTemperature" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                                <label
+                                    htmlFor="agentTemperature"
+                                    className="block text-sm font-medium mb-1 dark:text-gray-200"
+                                >
                                     Agent Temperature
                                 </label>
                                 <input
@@ -633,12 +841,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     defaultValue="0.7"
                                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 />
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Creativity for reasoning (0.0-1.0)</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Creativity for reasoning (0.0-1.0)
+                                </p>
                             </div>
                         </div>
 
                         <div>
-                            <label htmlFor="agentComplexityThreshold" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="agentComplexityThreshold"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Complexity Threshold
                             </label>
                             <select
@@ -647,12 +860,19 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                                 defaultValue="medium"
                             >
-                                <option value="low">Low - Activate for most queries</option>
-                                <option value="medium">Medium - Balanced (recommended)</option>
-                                <option value="high">High - Only very complex queries</option>
+                                <option value="low">
+                                    Low - Activate for most queries
+                                </option>
+                                <option value="medium">
+                                    Medium - Balanced (recommended)
+                                </option>
+                                <option value="high">
+                                    High - Only very complex queries
+                                </option>
                             </select>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                Minimum query complexity required to trigger agent mode in auto mode
+                                Minimum query complexity required to trigger
+                                agent mode in auto mode
                             </p>
                         </div>
 
@@ -665,12 +885,16 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                     className="w-4 h-4"
                                     defaultChecked
                                 />
-                                <label htmlFor="agentShowReasoning" className="text-sm font-medium dark:text-gray-300">
+                                <label
+                                    htmlFor="agentShowReasoning"
+                                    className="text-sm font-medium dark:text-gray-300"
+                                >
                                     Show Reasoning Steps
                                 </label>
                             </div>
                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
-                                Display the agent's thought process, actions, and observations to users
+                                Display the agent's thought process, actions,
+                                and observations to users
                             </p>
                         </div>
                     </div>
@@ -678,16 +902,24 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
 
                 {/* Document Library */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Document Library</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Document Library
+                    </h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                        Select which documents this AI model should have access to
+                        Select which documents this AI model should have access
+                        to
                     </p>
                     <div className="space-y-2 max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-4 dark:bg-gray-750">
                         {documents.length === 0 ? (
-                            <p className="text-gray-500 dark:text-gray-400 text-sm">No documents available</p>
+                            <p className="text-gray-500 dark:text-gray-400 text-sm">
+                                No documents available
+                            </p>
                         ) : (
                             documents.map((doc) => (
-                                <div key={doc.documentUUID} className="flex items-center gap-3">
+                                <div
+                                    key={doc.documentUUID}
+                                    className="flex items-center gap-3"
+                                >
                                     <input
                                         type="checkbox"
                                         id={`doc-${doc.documentUUID}`}
@@ -695,9 +927,14 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                         value={doc.documentId}
                                         className="w-4 h-4"
                                     />
-                                    <label htmlFor={`doc-${doc.documentUUID}`} className="text-sm flex-1">
+                                    <label
+                                        htmlFor={`doc-${doc.documentUUID}`}
+                                        className="text-sm flex-1"
+                                    >
                                         {doc.documentTitle}
-                                        <span className="text-gray-500 dark:text-gray-400 ml-2">({doc.documentType})</span>
+                                        <span className="text-gray-500 dark:text-gray-400 ml-2">
+                                            ({doc.documentType})
+                                        </span>
                                     </label>
                                 </div>
                             ))
@@ -707,9 +944,12 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
 
                 {/* System Prompt */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">System Prompt *</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        System Prompt *
+                    </h2>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                        Define the AI's role, personality, and behaviour. This instruction is sent with every message.
+                        Define the AI's role, personality, and behaviour. This
+                        instruction is sent with every message.
                     </p>
                     <textarea
                         id="systemPrompt"
@@ -721,16 +961,23 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                         required
                     />
                     {actionData?.errors?.systemPrompt && (
-                        <p className="text-red-600 dark:text-red-400 text-sm mt-1">{actionData.errors.systemPrompt}</p>
+                        <p className="text-red-600 dark:text-red-400 text-sm mt-1">
+                            {actionData.errors.systemPrompt}
+                        </p>
                     )}
                 </div>
 
                 {/* Context Settings */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Context Settings</h2>
+                    <h2 className="text-xl font-semibold mb-4 dark:text-white">
+                        Context Settings
+                    </h2>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label htmlFor="maxContextTokens" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="maxContextTokens"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Max Context Tokens
                             </label>
                             <input
@@ -742,11 +989,17 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 defaultValue="16384"
                                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                             />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total tokens for conversation history + documents (check your model's limit)</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Total tokens for conversation history +
+                                documents (check your model's limit)
+                            </p>
                         </div>
 
                         <div>
-                            <label htmlFor="maxOutputTokens" className="block text-sm font-medium mb-1 dark:text-gray-200">
+                            <label
+                                htmlFor="maxOutputTokens"
+                                className="block text-sm font-medium mb-1 dark:text-gray-200"
+                            >
                                 Max Output Tokens
                             </label>
                             <input
@@ -758,7 +1011,10 @@ export default function NewModel({ loaderData }: Route.ComponentProps) {
                                 defaultValue="4096"
                                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 dark:bg-gray-700 dark:text-white"
                             />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Maximum length of AI responses (higher allows longer answers)</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Maximum length of AI responses (higher allows
+                                longer answers)
+                            </p>
                         </div>
                     </div>
                 </div>

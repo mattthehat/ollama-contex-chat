@@ -7,11 +7,23 @@ import Spinner from '~/components/Loader';
 import ChatHistory from '~/components/ChatHistory';
 import ChatMessage from '~/components/ChatMessage';
 import { getChatMessages, saveMessage } from '~/lib/chat.server';
-import { buildMessagesForOllama, estimateTokenCount, calculateTotalTokens } from '~/lib/chat';
+import {
+    buildMessagesForOllama,
+    estimateTokenCount,
+    calculateTotalTokens,
+} from '~/lib/chat';
 import { getAllDocuments, buildRAGContext } from '~/lib/document.server';
 import { getAllCustomModels, getCustomModelById } from '~/lib/models.server';
-import { detectPromptInjection, sanitizeRAGContext, protectSystemPrompt } from '~/lib/prompt-protection';
-import { createTimingTracker, logPerformance, type TimingTracker } from '~/lib/performance-logger.server';
+import {
+    detectPromptInjection,
+    sanitizeRAGContext,
+    protectSystemPrompt,
+} from '~/lib/prompt-protection';
+import {
+    createTimingTracker,
+    logPerformance,
+    type TimingTracker,
+} from '~/lib/performance-logger.server';
 
 export const loader = async ({ params }: Route.LoaderArgs) => {
     const { chatId } = params;
@@ -72,7 +84,9 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     // Handle initial message submission
     const message = formData.get('message') as string;
     const customModelId = formData.get('customModelId') as string;
-    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Form data parsed`);
+    console.log(
+        `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Form data parsed`
+    );
 
     if (!message?.trim()) {
         return {
@@ -93,7 +107,10 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     // PERFORMANCE: Get the custom model configuration first (fast database lookup)
     tracker.modelLookupStart = performance.now();
     const customModel = await getCustomModelById(parseInt(customModelId));
-    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Model lookup took ${(tracker.modelLookupEnd! - tracker.modelLookupStart!).toFixed(2)}ms`);
+    tracker.modelLookupEnd = performance.now();
+    console.log(
+        `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Model lookup took ${(tracker.modelLookupEnd - tracker.modelLookupStart).toFixed(2)}ms`
+    );
     if (!customModel) {
         return {
             errors: { message: null, model: 'Model not found' },
@@ -103,9 +120,36 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         };
     }
 
-    // PERFORMANCE: Run prompt injection check and data fetching in parallel
-    const parallelStart = performance.now();
-    const [injectionWarning, documentIds, conversationHistory] = await Promise.all([
+    // Get conversation history from client (has latest messages not yet saved to DB)
+    // Fall back to DB if not provided
+    const clientHistoryJson = formData.get('conversationHistory') as string;
+    let conversationHistory: Array<{
+        role: 'user' | 'assistant' | 'system';
+        content: string;
+    }> = [];
+
+    if (clientHistoryJson) {
+        try {
+            conversationHistory = JSON.parse(clientHistoryJson);
+            console.log(
+                `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Using client-provided history (${conversationHistory.length} messages)`
+            );
+        } catch (e) {
+            console.log(
+                `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Failed to parse client history, falling back to DB`
+            );
+            conversationHistory = chatId ? await getChatMessages(chatId) : [];
+        }
+    } else {
+        conversationHistory = chatId ? await getChatMessages(chatId) : [];
+        console.log(
+            `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Using DB history (${conversationHistory.length} messages)`
+        );
+    }
+
+    // PERFORMANCE: Run prompt injection check and document fetching in parallel
+    tracker.parallelStart = performance.now();
+    const [injectionWarning, documentIds] = await Promise.all([
         // Check for prompt injection attempts (fast regex checks)
         Promise.resolve(detectPromptInjection(message)),
         // Get documents associated with this model
@@ -113,10 +157,11 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
             const { getModelDocumentIds } = await import('~/lib/models.server');
             return getModelDocumentIds(customModel.modelId);
         })(),
-        // Get conversation history for better RAG context
-        chatId ? getChatMessages(chatId) : Promise.resolve([])
     ]);
-    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Parallel operations took ${(performance.now() - parallelStart).toFixed(2)}ms`);
+    tracker.parallelEnd = performance.now();
+    console.log(
+        `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Parallel operations took ${(tracker.parallelEnd - tracker.parallelStart).toFixed(2)}ms`
+    );
 
     if (injectionWarning) {
         return {
@@ -127,37 +172,89 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         };
     }
 
+    // PERFORMANCE: Check if query needs clarification (fast, no LLM calls)
+    const { detectClarificationNeeds, buildClarificationMessage } =
+        await import('~/lib/query-clarification.server');
+    const clarification = detectClarificationNeeds(
+        message,
+        conversationHistory
+    );
+
+    if (clarification.needed) {
+        console.log(
+            `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Query needs clarification - skipping expensive RAG`
+        );
+        return {
+            errors: { message: null, model: null },
+            message,
+            model: customModel.modelName,
+            selectedDocs: [],
+            ragContext: buildClarificationMessage(clarification),
+            systemPrompt: 'Clarification needed',
+            serverProcessingTime: performance.now() - tracker.startTime,
+        };
+    }
+
     // Process the message
     {
         // Convert document IDs to UUIDs (only if we have documents)
         let selectedDocs: string[] = [];
         if (documentIds.length > 0) {
-            const docConversionStart = performance.now();
+            tracker.docConversionStart = performance.now();
             const { getAllDocuments } = await import('~/lib/document.server');
             const allDocs = await getAllDocuments();
             selectedDocs = allDocs
-                .filter(doc => documentIds.includes(doc.documentId))
-                .map(doc => doc.documentUUID);
-            console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Document UUID conversion took ${(performance.now() - docConversionStart).toFixed(2)}ms`);
+                .filter((doc) => documentIds.includes(doc.documentId))
+                .map((doc) => doc.documentUUID);
+            tracker.docConversionEnd = performance.now();
+            console.log(
+                `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Document UUID conversion took ${(tracker.docConversionEnd - tracker.docConversionStart).toFixed(2)}ms`
+            );
         } else {
-            console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] No documents to process`);
+            console.log(
+                `[${(performance.now() - tracker.startTime).toFixed(2)}ms] No documents to process`
+            );
         }
 
         // Use model's context configuration
-        const tokenCalcStart = performance.now();
+        tracker.tokenCalcStart = performance.now();
         const systemPromptTokens = estimateTokenCount(customModel.systemPrompt);
         const conversationTokens = calculateTotalTokens(conversationHistory);
         const messageTokens = estimateTokenCount(message);
-        const availableTokens = (customModel.maxContextTokens * 0.7) - systemPromptTokens - conversationTokens - messageTokens;
+        const availableTokens =
+            customModel.maxContextTokens * 0.7 -
+            systemPromptTokens -
+            conversationTokens -
+            messageTokens;
 
         // PERFORMANCE: Calculate chunk limits efficiently
-        const dynamicChunkLimit = Math.max(3, Math.min(customModel.ragMaxChunks, Math.floor(availableTokens / 500)));
-        console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Token calculations took ${(performance.now() - tokenCalcStart).toFixed(2)}ms`);
+        const dynamicChunkLimit = Math.max(
+            3,
+            Math.min(
+                customModel.ragMaxChunks,
+                Math.floor(availableTokens / 500)
+            )
+        );
+        tracker.tokenCalcEnd = performance.now();
+        console.log(
+            `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Token calculations took ${(tracker.tokenCalcEnd - tracker.tokenCalcStart).toFixed(2)}ms`
+        );
 
         // Check if model has intelligent RAG enabled
-        const useIntelligentRAG = customModel.ragUseHyDE ||
-                                 customModel.ragEnableCitations ||
-                                 customModel.ragEnableConfidenceScoring;
+        const useIntelligentRAG =
+            customModel.ragUseHyDE ||
+            customModel.ragEnableCitations ||
+            customModel.ragEnableConfidenceScoring;
+
+        // PERFORMANCE: Check if we should use fast path with learned strategy
+        const { shouldUseFastPath } =
+            await import('~/lib/intelligent-chat-fast.server');
+        const useFastPath = shouldUseFastPath(
+            message,
+            useIntelligentRAG && customModel.ragUseHyDE,
+            conversationHistory.length,
+            selectedDocs.length
+        );
 
         let ragContext = '';
         let citations = '';
@@ -168,13 +265,43 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         // PERFORMANCE: Only build RAG context if we have selected documents
         // This is the most expensive operation, so skip it entirely when not needed
         if (selectedDocs.length > 0) {
-            const ragStart = performance.now();
-            console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Starting RAG processing with ${selectedDocs.length} documents`);
+            tracker.ragStart = performance.now();
+            console.log(
+                `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Starting RAG processing with ${selectedDocs.length} documents`
+            );
 
-            if (useIntelligentRAG) {
-                console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Using intelligent RAG`);
-                // Use intelligent RAG system
-                const { generateIntelligentResponse } = await import('~/lib/intelligent-chat.server');
+            // PERFORMANCE: Use fast path for simple queries to avoid 40+ second HyDE overhead
+            if (useFastPath) {
+                console.log(
+                    `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Using FAST PATH (skipping HyDE)`
+                );
+                const { generateFastIntelligentContext } =
+                    await import('~/lib/intelligent-chat-fast.server');
+
+                const result = await generateFastIntelligentContext({
+                    message,
+                    documentUUIDs: selectedDocs,
+                    conversationHistory,
+                    customSystemPrompt: customModel.systemPrompt,
+                    maxChunks: dynamicChunkLimit,
+                    similarityThreshold: customModel.ragSimilarityThreshold,
+                    modelId: customModel.modelId,
+                    chatId: undefined,
+                });
+
+                ragContext = result.ragContext;
+                ragChunksFound = result.metadata.chunksUsed;
+                tracker.ragEnd = performance.now();
+                console.log(
+                    `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Fast path completed in ${(tracker.ragEnd - tracker.ragStart).toFixed(2)}ms`
+                );
+            } else if (useIntelligentRAG) {
+                console.log(
+                    `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Using SLOW PATH intelligent RAG (with HyDE)`
+                );
+                // Use full intelligent RAG system (slow, 40+ seconds)
+                const { generateIntelligentResponse } =
+                    await import('~/lib/intelligent-chat.server');
 
                 try {
                     const result = await generateIntelligentResponse({
@@ -183,19 +310,27 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                         conversationHistory,
                         userRole: undefined,
                         useAdvancedRAG: customModel.ragUseHyDE,
-                        customSystemPrompt: customModel.systemPrompt
+                        customSystemPrompt: customModel.systemPrompt,
+                        modelId: customModel.modelId,
+                        chatId: undefined,
                     });
 
                     ragContext = result.answer;
                     citations = result.citations || '';
                     confidence = result.confidence;
                     intelligentMetadata = result.metadata;
-                    ragChunksFound = intelligentMetadata?.chunksUsed || dynamicChunkLimit;
-                    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Intelligent RAG completed in ${(performance.now() - ragStart).toFixed(2)}ms`);
+                    ragChunksFound =
+                        intelligentMetadata?.chunksUsed || dynamicChunkLimit;
+                    tracker.ragEnd = performance.now();
+                    console.log(
+                        `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Intelligent RAG completed in ${(tracker.ragEnd - tracker.ragStart).toFixed(2)}ms`
+                    );
                 } catch (error) {
-                    console.error('Intelligent RAG failed, falling back to basic RAG:', error);
+                    console.error(
+                        'Intelligent RAG failed, falling back to basic RAG:',
+                        error
+                    );
                     // Fall back to basic RAG on error
-                    const fallbackStart = performance.now();
                     const rawRAGContext = await buildRAGContext(
                         message,
                         selectedDocs,
@@ -206,10 +341,15 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                     );
                     ragContext = sanitizeRAGContext(rawRAGContext);
                     ragChunksFound = dynamicChunkLimit;
-                    console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Fallback RAG completed in ${(performance.now() - fallbackStart).toFixed(2)}ms`);
+                    tracker.ragEnd = performance.now();
+                    console.log(
+                        `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Fallback RAG completed in ${(tracker.ragEnd - tracker.ragStart).toFixed(2)}ms`
+                    );
                 }
             } else {
-                console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Using basic RAG`);
+                console.log(
+                    `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Using basic RAG`
+                );
                 // Use basic RAG (faster than intelligent RAG)
                 const rawRAGContext = await buildRAGContext(
                     message,
@@ -221,19 +361,31 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                 );
                 ragContext = sanitizeRAGContext(rawRAGContext);
                 ragChunksFound = dynamicChunkLimit;
-                console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Basic RAG completed in ${(performance.now() - ragStart).toFixed(2)}ms`);
+                tracker.ragEnd = performance.now();
+                console.log(
+                    `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Basic RAG completed in ${(tracker.ragEnd - tracker.ragStart).toFixed(2)}ms`
+                );
             }
         } else {
-            console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] Skipping RAG (no documents selected)`);
+            console.log(
+                `[${(performance.now() - tracker.startTime).toFixed(2)}ms] Skipping RAG (no documents selected)`
+            );
         }
 
         // Protect system prompt against injection attempts
-        const protectStart = performance.now();
-        const protectedSystemPrompt = protectSystemPrompt(customModel.systemPrompt);
-        console.log(`[${(performance.now() - tracker.startTime).toFixed(2)}ms] System prompt protection took ${(performance.now() - protectStart).toFixed(2)}ms`);
+        tracker.protectStart = performance.now();
+        const protectedSystemPrompt = protectSystemPrompt(
+            customModel.systemPrompt
+        );
+        tracker.protectEnd = performance.now();
+        console.log(
+            `[${(performance.now() - tracker.startTime).toFixed(2)}ms] System prompt protection took ${(tracker.protectEnd - tracker.protectStart).toFixed(2)}ms`
+        );
 
         const totalTime = performance.now() - tracker.startTime;
-        console.log(`[${totalTime.toFixed(2)}ms] === ACTION COMPLETED (Total: ${totalTime.toFixed(2)}ms) ===\n`);
+        console.log(
+            `[${totalTime.toFixed(2)}ms] === ACTION COMPLETED (Total: ${totalTime.toFixed(2)}ms) ===\n`
+        );
 
         // Log performance data to file with metadata
         logPerformance(tracker, {
@@ -261,15 +413,20 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                 enableCitations: customModel.ragEnableCitations,
                 enableConfidenceScoring: customModel.ragEnableConfidenceScoring,
                 addFollowUpSuggestions: customModel.ragAddFollowUpSuggestions,
-                addSmartDisclaimers: customModel.ragAddSmartDisclaimers
+                addSmartDisclaimers: customModel.ragAddSmartDisclaimers,
             },
             systemPrompt: protectedSystemPrompt,
             modelConfig: {
                 temperature: parseFloat(customModel.ollamaTemperature as any),
                 top_p: parseFloat(customModel.ollamaTopP as any),
                 top_k: parseInt(customModel.ollamaTopK as any),
-                repeat_penalty: parseFloat(customModel.ollamaRepeatPenalty as any),
-                seed: customModel.ollamaSeed ? parseInt(customModel.ollamaSeed as any) : undefined,
+                repeat_penalty: parseFloat(
+                    customModel.ollamaRepeatPenalty as any
+                ),
+                seed: customModel.ollamaSeed
+                    ? parseInt(customModel.ollamaSeed as any)
+                    : undefined,
+                num_ctx: customModel.maxContextTokens,
             },
             errors: { message: null, model: null },
         };
@@ -287,6 +444,12 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
     const hasSavedRef = useRef(false);
     const processedMessageRef = useRef<string>('');
 
+    // IMPORTANT: Track messages in state so we include saved messages in context
+    // loaderData.messages only has messages from page load, not subsequent exchanges
+    const [messages, setMessages] = useState<
+        Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+    >(loaderData?.messages || []);
+
     const isBusy = fetcher.state === 'submitting';
 
     useEffect(() => {
@@ -300,8 +463,9 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
             hasSavedRef.current = false; // Reset save flag for new message
 
             // Build the messages array with system prompt + RAG context + history + new user message
+            // IMPORTANT: Use `messages` state which includes saved messages, not just loaderData
             const allMessages = buildMessagesForOllama(
-                loaderData?.messages || [],
+                messages,
                 actionData.message,
                 actionData.systemPrompt || 'You are a helpful assistant.',
                 actionData.ragContext || ''
@@ -315,7 +479,12 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
             );
             setThinking(true);
         }
-    }, [actionData?.message, actionData?.model, actionData?.ragContext]);
+    }, [
+        actionData?.message,
+        actionData?.model,
+        actionData?.ragContext,
+        messages,
+    ]);
 
     useEffect(() => {
         if (!isBusy && textareaRef.current) {
@@ -341,6 +510,13 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
             !hasSavedRef.current
         ) {
             hasSavedRef.current = true; // Mark as saved to prevent duplicate saves
+
+            // IMPORTANT: Add messages to client-side state so next message has full context
+            setMessages((prev) => [
+                ...prev,
+                { role: 'user' as const, content: currentUserMessage },
+                { role: 'assistant' as const, content: ollama.response },
+            ]);
 
             const formData = new FormData();
             formData.append('intent', 'save');
@@ -373,8 +549,8 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
                 </div>
             )}
 
-            {/* Render chat history from loader */}
-            <ChatHistory messages={loaderData?.messages} />
+            {/* Render chat history from state (includes saved messages) */}
+            <ChatHistory messages={messages} />
 
             {/* Show current streaming message (only if not saved yet) */}
             {actionData?.message && currentUserMessage && (
@@ -394,6 +570,12 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
             )}
 
             <fetcher.Form method="post" className="my-6">
+                {/* Send current conversation history to server for RAG context */}
+                <input
+                    type="hidden"
+                    name="conversationHistory"
+                    value={JSON.stringify(messages)}
+                />
                 <textarea
                     ref={textareaRef}
                     name="message"
@@ -437,7 +619,10 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
                         {isBusy ? 'Sending...' : 'Send'}
                     </button>
                     <div className="flex-1">
-                        <label htmlFor="customModelId" className="block text-sm font-medium mb-1">
+                        <label
+                            htmlFor="customModelId"
+                            className="block text-sm font-medium mb-1"
+                        >
                             Select AI Model
                         </label>
                         <select
@@ -468,7 +653,10 @@ export default function ChatDetail({ loaderData }: Route.ComponentProps) {
                             ))}
                         </select>
                         {actionData?.errors?.model && (
-                            <div id="model-error" className="text-red-500 text-sm mt-1">
+                            <div
+                                id="model-error"
+                                className="text-red-500 text-sm mt-1"
+                            >
                                 {actionData.errors.model}
                             </div>
                         )}
